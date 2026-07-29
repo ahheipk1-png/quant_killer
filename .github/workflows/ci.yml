@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  sanity:
+    name: Repo sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Required files exist
+        run: |
+          for f in README.md LICENSE CLAUDE.md AGENTS.md INSTALL.md \
+                   contracts/rng-spec.md contracts/schema/request.schema.json \
+                   contracts/schema/response.schema.json; do
+            [ -f "$f" ] || { echo "MISSING: $f"; exit 1; }
+          done
+          echo "All required files present."
+      - name: Schemas are valid JSON
+        run: |
+          python3 -c "import json,glob; [json.load(open(p)) for p in glob.glob('contracts/schema/*.json')+glob.glob('contracts/vectors/*.json')]; print('JSON OK')"
+
+  # Language jobs are appended as each implementation lands (see CLAUDE.md phases):
+  #   python  -> pytest against contracts/vectors
+  #   cpp     -> cmake + ctest
+  #   rust    -> cargo test
+  #   csharp  -> dotnet test
+  #   java    -> mvn test
+  #   crosslang -> run every CLI on the same request, diff outputs

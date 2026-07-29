@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://quantkiller.dev/schema/response.schema.json",
+  "title": "QuantKiller pricing response",
+  "type": "object",
+  "required": ["ok"],
+  "additionalProperties": false,
+  "properties": {
+    "ok": { "type": "boolean" },
+    "model": { "type": "string" },
+    "engine": {
+      "type": "string",
+      "description": "Implementation that produced the result, e.g. 'python/0.1.0', 'rust/0.1.0'"
+    },
+    "results": {
+      "type": "object",
+      "description": "Numeric outputs, e.g. price, delta, gamma, vega, theta, rho, std_error, implied_vol",
+      "additionalProperties": { "type": "number" }
+    },
+    "error": { "type": "string" }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://quantkiller.dev/schema/request.schema.json",
+  "title": "QuantKiller pricing request",
+  "type": "object",
+  "required": ["model", "params"],
+  "additionalProperties": false,
+  "properties": {
+    "model": {
+      "type": "string",
+      "description": "Model identifier, e.g. black_scholes, binomial_crr, monte_carlo_gbm, implied_vol, forward, put_call_parity, digital, barrier, asian, trinomial, fd_bs, heston, lsmc_american, vasicek, hull_white"
+    },
+    "params": {
+      "type": "object",
+      "description": "Model-specific parameters. Common names: spot, strike, rate (continuously compounded), div_yield, vol (annualized), time (year fraction), option_type ('call'|'put'), style ('european'|'american'), steps, paths, seed, antithetic."
+    }
+  }
+}

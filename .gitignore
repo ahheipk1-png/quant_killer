@@ -1,0 +1,55 @@
+# --- General ---
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- C++ / CMake ---
+cpp/build/
+cpp/out/
+CMakeUserPresets.json
+
+# --- Rust ---
+rust/target/
+# Cargo.lock is committed for the CLI workspace (reproducible builds)
+
+# --- C# / .NET ---
+csharp/**/bin/
+csharp/**/obj/
+excel/**/bin/
+excel/**/obj/
+*.user
+
+# --- Java / Maven ---
+java/target/
+java/**/target/
+.classpath
+.project
+.settings/
+
+# --- IDEs ---
+.idea/
+.vscode/
+*.suo
+*.swp
+
+# --- Docs site ---
+site/
+
+# --- OS installers / artifacts ---
+*.msi
+*.exe.download
+artifacts/
