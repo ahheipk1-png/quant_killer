@@ -1,0 +1,101 @@
+{
+  "model": "binomial_crr",
+  "cases": [
+    {
+      "name": "eu_call_100steps",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.2,
+        "time": 1.0,
+        "option_type": "call",
+        "style": "european",
+        "steps": 100
+      },
+      "expected": {
+        "price": 10.430611662249397,
+        "delta": 0.6365119623646374,
+        "gamma": 0.018922178987561888,
+        "theta": -6.445313326121749
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-10
+      }
+    },
+    {
+      "name": "eu_put_100steps",
+      "params": {
+        "spot": 100.0,
+        "strike": 105.0,
+        "rate": 0.03,
+        "div_yield": 0.01,
+        "vol": 0.25,
+        "time": 0.5,
+        "option_type": "put",
+        "style": "european",
+        "steps": 100
+      },
+      "expected": {
+        "price": 9.29988113727122,
+        "delta": -0.5494112066149889,
+        "gamma": 0.022324347721594844,
+        "theta": -5.599381636798206
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-10
+      }
+    },
+    {
+      "name": "am_put_100steps",
+      "params": {
+        "spot": 100.0,
+        "strike": 110.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.3,
+        "time": 1.0,
+        "option_type": "put",
+        "style": "american",
+        "steps": 100
+      },
+      "expected": {
+        "price": 15.638425020160586,
+        "delta": -0.5511864285463267,
+        "gamma": 0.015996929699777968,
+        "theta": -3.660774715303816
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-10
+      }
+    },
+    {
+      "name": "am_call_dividend_100steps",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.04,
+        "div_yield": 0.08,
+        "vol": 0.25,
+        "time": 1.0,
+        "option_type": "call",
+        "style": "american",
+        "steps": 100
+      },
+      "expected": {
+        "price": 8.105242903753625,
+        "delta": 0.49150604522459446,
+        "gamma": 0.017472741899532646,
+        "theta": -3.169674245645826
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-10
+      }
+    }
+  ]
+}

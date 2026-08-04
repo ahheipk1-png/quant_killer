@@ -1,0 +1,235 @@
+{
+  "model": "black_scholes",
+  "cases": [
+    {
+      "name": "hull_example_call",
+      "params": {
+        "spot": 42.0,
+        "strike": 40.0,
+        "rate": 0.1,
+        "div_yield": 0.0,
+        "vol": 0.2,
+        "time": 0.5,
+        "option_type": "call"
+      },
+      "expected": {
+        "price": 4.759422392871535,
+        "delta": 0.779131290942669,
+        "gamma": 0.049962670405911846,
+        "vega": 8.813415059602852,
+        "theta": -4.559092194592626,
+        "rho": 13.982045913360281,
+        "d1": 0.7692626281060315,
+        "d2": 0.627841271868722
+      },
+      "tolerance": {
+        "rel": 1e-10,
+        "abs": 1e-12
+      }
+    },
+    {
+      "name": "hull_example_put",
+      "params": {
+        "spot": 42.0,
+        "strike": 40.0,
+        "rate": 0.1,
+        "div_yield": 0.0,
+        "vol": 0.2,
+        "time": 0.5,
+        "option_type": "put"
+      },
+      "expected": {
+        "price": 0.808599372900094,
+        "delta": -0.22086870905733105,
+        "gamma": 0.049962670405911846,
+        "vega": 8.813415059602852,
+        "theta": -0.7541744965897703,
+        "rho": -5.042542576653999,
+        "d1": 0.7692626281060315,
+        "d2": 0.627841271868722
+      },
+      "tolerance": {
+        "rel": 1e-10,
+        "abs": 1e-12
+      }
+    },
+    {
+      "name": "atm_with_dividend_call",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "div_yield": 0.02,
+        "vol": 0.3,
+        "time": 1.0,
+        "option_type": "call"
+      },
+      "expected": {
+        "price": 13.020281268727345,
+        "delta": 0.586851146134764,
+        "gamma": 0.012633719170005808,
+        "vega": 37.90115751001743,
+        "theta": -6.794713001470538,
+        "rho": 45.66483334474905,
+        "d1": 0.25,
+        "d2": -0.04999999999999999
+      },
+      "tolerance": {
+        "rel": 1e-10,
+        "abs": 1e-12
+      }
+    },
+    {
+      "name": "atm_with_dividend_put",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "div_yield": 0.02,
+        "vol": 0.3,
+        "time": 1.0,
+        "option_type": "put"
+      },
+      "expected": {
+        "price": 10.12335638812322,
+        "delta": -0.39334752717199134,
+        "gamma": 0.012633719170005808,
+        "vega": 37.90115751001743,
+        "theta": -3.9989632255804786,
+        "rho": -49.45810910532236,
+        "d1": 0.25,
+        "d2": -0.04999999999999999
+      },
+      "tolerance": {
+        "rel": 1e-10,
+        "abs": 1e-12
+      }
+    },
+    {
+      "name": "otm_call_long_dated",
+      "params": {
+        "spot": 50.0,
+        "strike": 60.0,
+        "rate": 0.03,
+        "div_yield": 0.0,
+        "vol": 0.15,
+        "time": 2.0,
+        "option_type": "call"
+      },
+      "expected": {
+        "price": 1.9692803419838771,
+        "delta": 0.3189762991704017,
+        "gamma": 0.03367060530211696,
+        "vega": 25.252953976587726,
+        "theta": -1.3663718126181257,
+        "rho": 27.959069233072416,
+        "d1": -0.47056333145068924,
+        "d2": -0.6826953658066535
+      },
+      "tolerance": {
+        "rel": 1e-10,
+        "abs": 1e-12
+      }
+    },
+    {
+      "name": "itm_put_long_dated",
+      "params": {
+        "spot": 60.0,
+        "strike": 50.0,
+        "rate": 0.03,
+        "div_yield": 0.0,
+        "vol": 0.15,
+        "time": 2.0,
+        "option_type": "put"
+      },
+      "expected": {
+        "price": 0.7085120812311656,
+        "delta": -0.10594582012470616,
+        "gamma": 0.01437932309906284,
+        "vega": 15.52966894698787,
+        "theta": -0.37040474685063896,
+        "rho": -14.13052257742707,
+        "d1": 1.2483807907558915,
+        "d2": 1.0362487563999272
+      },
+      "tolerance": {
+        "rel": 1e-10,
+        "abs": 1e-12
+      }
+    },
+    {
+      "name": "zero_rate_high_vol",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.0,
+        "div_yield": 0.0,
+        "vol": 0.4,
+        "time": 3.0,
+        "option_type": "call"
+      },
+      "expected": {
+        "price": 27.096551046119593,
+        "delta": 0.6354827552305979,
+        "gamma": 0.005422902275549316,
+        "vega": 65.07482730659179,
+        "theta": -4.338321820439453,
+        "rho": 109.3551734308206,
+        "d1": 0.3464101615137755,
+        "d2": -0.3464101615137754
+      },
+      "tolerance": {
+        "rel": 1e-10,
+        "abs": 1e-12
+      }
+    },
+    {
+      "name": "time_zero_itm_call",
+      "params": {
+        "spot": 105.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.2,
+        "time": 0.0,
+        "option_type": "call"
+      },
+      "expected": {
+        "price": 5.0,
+        "delta": 1.0,
+        "gamma": 0.0,
+        "vega": 0.0,
+        "theta": 0.0,
+        "rho": 0.0
+      },
+      "tolerance": {
+        "rel": 1e-10,
+        "abs": 1e-12
+      }
+    },
+    {
+      "name": "zero_vol_call",
+      "params": {
+        "spot": 100.0,
+        "strike": 90.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.0,
+        "time": 1.0,
+        "option_type": "call"
+      },
+      "expected": {
+        "price": 14.389351794935738,
+        "delta": 1.0,
+        "gamma": 0.0,
+        "vega": 0.0,
+        "theta": 0.0,
+        "rho": 0.0
+      },
+      "tolerance": {
+        "rel": 1e-10,
+        "abs": 1e-12
+      }
+    }
+  ]
+}

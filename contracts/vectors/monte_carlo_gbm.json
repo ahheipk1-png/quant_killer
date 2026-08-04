@@ -1,0 +1,74 @@
+{
+  "model": "monte_carlo_gbm",
+  "cases": [
+    {
+      "name": "call_seed42_50k",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.2,
+        "time": 1.0,
+        "option_type": "call",
+        "paths": 50000,
+        "seed": 42,
+        "antithetic": true
+      },
+      "expected": {
+        "price": 10.443292711615577,
+        "std_error": 0.03281292358812537
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-09
+      }
+    },
+    {
+      "name": "put_seed7_50k",
+      "params": {
+        "spot": 100.0,
+        "strike": 105.0,
+        "rate": 0.03,
+        "div_yield": 0.01,
+        "vol": 0.25,
+        "time": 0.5,
+        "option_type": "put",
+        "paths": 50000,
+        "seed": 7,
+        "antithetic": true
+      },
+      "expected": {
+        "price": 9.270092564272707,
+        "std_error": 0.017739417892570202
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-09
+      }
+    },
+    {
+      "name": "call_seed1_no_antithetic_20k",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.2,
+        "time": 1.0,
+        "option_type": "call",
+        "paths": 20000,
+        "seed": 1,
+        "antithetic": false
+      },
+      "expected": {
+        "price": 10.506174590926033,
+        "std_error": 0.10513480111046633
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-09
+      }
+    }
+  ]
+}

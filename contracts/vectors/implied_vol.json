@@ -1,0 +1,43 @@
+{
+  "model": "implied_vol",
+  "cases": [
+    {
+      "name": "recover_20pct_call",
+      "params": {
+        "price": 5.698533610716886,
+        "spot": 100.0,
+        "strike": 105.0,
+        "rate": 0.04,
+        "div_yield": 0.01,
+        "time": 0.75,
+        "option_type": "call"
+      },
+      "expected": {
+        "implied_vol": 0.19999999999999982
+      },
+      "tolerance": {
+        "rel": 1e-06,
+        "abs": 1e-07
+      }
+    },
+    {
+      "name": "recover_50pct_put",
+      "params": {
+        "price": 15.311610989633557,
+        "spot": 100.0,
+        "strike": 95.0,
+        "rate": 0.03,
+        "div_yield": 0.0,
+        "time": 1.0,
+        "option_type": "put"
+      },
+      "expected": {
+        "implied_vol": 0.5000000000000004
+      },
+      "tolerance": {
+        "rel": 1e-06,
+        "abs": 1e-07
+      }
+    }
+  ]
+}

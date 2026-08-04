@@ -1,0 +1,81 @@
+{
+  "model": "american_bjerksund_2002",
+  "cases": [
+    {
+      "name": "put_atm",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.3,
+        "time": 1.0,
+        "option_type": "put"
+      },
+      "expected": {
+        "price": 9.825398056406542
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-09
+      }
+    },
+    {
+      "name": "put_otm",
+      "params": {
+        "spot": 100.0,
+        "strike": 90.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.3,
+        "time": 1.0,
+        "option_type": "put"
+      },
+      "expected": {
+        "price": 5.5191116071375745
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-09
+      }
+    },
+    {
+      "name": "put_itm",
+      "params": {
+        "spot": 100.0,
+        "strike": 110.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.3,
+        "time": 1.0,
+        "option_type": "put"
+      },
+      "expected": {
+        "price": 15.566785760746534
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-09
+      }
+    },
+    {
+      "name": "call_high_dividend",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.04,
+        "div_yield": 0.08,
+        "vol": 0.25,
+        "time": 1.0,
+        "option_type": "call"
+      },
+      "expected": {
+        "price": 8.082023229393776
+      },
+      "tolerance": {
+        "rel": 1e-09,
+        "abs": 1e-09
+      }
+    }
+  ]
+}

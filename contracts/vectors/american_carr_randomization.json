@@ -1,0 +1,85 @@
+{
+  "model": "american_carr_randomization",
+  "cases": [
+    {
+      "name": "put_atm",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.3,
+        "time": 1.0,
+        "option_type": "put",
+        "phases": 64
+      },
+      "expected": {
+        "price": 9.869521080373044
+      },
+      "tolerance": {
+        "rel": 1e-06,
+        "abs": 1e-06
+      }
+    },
+    {
+      "name": "put_otm",
+      "params": {
+        "spot": 100.0,
+        "strike": 90.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.3,
+        "time": 1.0,
+        "option_type": "put",
+        "phases": 64
+      },
+      "expected": {
+        "price": 5.550971594458247
+      },
+      "tolerance": {
+        "rel": 1e-06,
+        "abs": 1e-06
+      }
+    },
+    {
+      "name": "put_itm",
+      "params": {
+        "spot": 100.0,
+        "strike": 110.0,
+        "rate": 0.05,
+        "div_yield": 0.0,
+        "vol": 0.3,
+        "time": 1.0,
+        "option_type": "put",
+        "phases": 64
+      },
+      "expected": {
+        "price": 15.61708115538649
+      },
+      "tolerance": {
+        "rel": 1e-06,
+        "abs": 1e-06
+      }
+    },
+    {
+      "name": "call_high_dividend",
+      "params": {
+        "spot": 100.0,
+        "strike": 100.0,
+        "rate": 0.04,
+        "div_yield": 0.08,
+        "vol": 0.25,
+        "time": 1.0,
+        "option_type": "call",
+        "phases": 64
+      },
+      "expected": {
+        "price": 8.117126332515518
+      },
+      "tolerance": {
+        "rel": 1e-06,
+        "abs": 1e-06
+      }
+    }
+  ]
+}
