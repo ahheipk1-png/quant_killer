@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A local polyglot browser option pricer with analytic, tree, and Monte Carlo methods.">
+    <title>QuantKiller · Polyglot Pricing Lab</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="exotics.css">
+    <script src="app.js?v=10" defer></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <p class="eyebrow">QuantKiller · Browser Lab</p>
+      <h1>Polyglot pricing,<br>inside your browser.</h1>
+      <p class="intro">
+        Compare Monte Carlo, Black-Scholes, and a binomial tree entirely on your
+        device. No pricing request leaves the browser.
+      </p>
+
+      <nav class="lab-nav" aria-label="Pricing labs">
+        <a href="index.html" aria-current="page">Vanilla &amp; American lab</a>
+        <a href="exotics.html">Exotic option lab</a>
+        <a href="volatility.html">Volatility surface lab</a>
+        <a href="portfolio.html">Portfolio pricer</a>
+        <a href="path-lab.html">Path distribution lab</a>
+        <a href="payoff-tests.html">Tests &amp; benchmarks</a>
+        <a href="polyglot-conformance.html">Four-language conformance</a>
+      </nav>
+
+      <div class="engine-line">
+        <span class="engine-dot" aria-hidden="true"></span>
+        <span id="engine-status" data-state="working">Loading C++ WebAssembly engine…</span>
+      </div>
+
+      <section class="workspace" aria-label="European option pricer">
+        <form id="pricing-form" class="panel form-panel">
+          <div class="form-grid">
+            <div class="field engine-field">
+              <label for="engine">Pricing language</label>
+              <select id="engine" name="engine">
+                <option value="cpp">C++ · WebAssembly</option>
+                <option value="python">Python · Pyodide</option>
+                <option value="rust">Rust · WebAssembly</option>
+                <option value="csharp">C# · .NET WebAssembly</option>
+              </select>
+            </div>
+
+            <div class="field engine-field">
+              <label for="method">Pricing method</label>
+              <select id="method" name="method">
+                <option value="monte-carlo">Monte Carlo simulation</option>
+                <option value="closed-form">Black-Scholes closed form</option>
+                <option value="binomial">CRR binomial tree</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="exercise-style">Exercise style</label>
+              <select id="exercise-style" name="exerciseStyle">
+                <option value="european">European</option>
+                <option value="american">American</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="option-type">Option type</label>
+              <select id="option-type" name="optionType">
+                <option value="call">Call</option>
+                <option value="put">Put</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="spot">Spot price</label>
+              <input id="spot" name="spot" type="number" min="0.000001" step="any" value="100" required>
+            </div>
+
+            <div class="field">
+              <label for="strike">Strike price</label>
+              <input id="strike" name="strike" type="number" min="0.000001" step="any" value="100" required>
+            </div>
+
+            <div class="field">
+              <label for="maturity">Time to maturity</label>
+              <div class="input-wrap">
+                <input id="maturity" name="maturity" type="number" min="0.000001" step="any" value="1" required>
+                <span class="suffix">years</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="rate">Risk-free rate</label>
+              <div class="input-wrap">
+                <input id="rate" name="rate" type="number" step="any" value="5" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="dividend-yield">Dividend yield</label>
+              <div class="input-wrap">
+                <input id="dividend-yield" name="dividendYield" type="number" step="any" value="0" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="volatility">Volatility</label>
+              <div class="input-wrap">
+                <input id="volatility" name="volatility" type="number" min="0" step="any" value="20" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+
+            <div class="field" data-method-only="monte-carlo" hidden>
+              <label for="paths">Monte Carlo paths</label>
+              <input id="paths" name="paths" type="number" min="2" max="2000000" step="1" value="100000" required>
+            </div>
+
+            <div class="field" data-method-only="monte-carlo" hidden>
+              <label for="seed">Random seed</label>
+              <input id="seed" name="seed" type="number" min="0" max="4294967295" step="1" value="42" required>
+            </div>
+
+            <div class="field" data-method-only="monte-carlo" hidden>
+              <label for="sampling">Sampling sequence</label>
+              <select id="sampling" name="sampling">
+                <option value="pcg">Pseudo-random · PCG32</option>
+                <option value="sobol">QMC · Sobol</option>
+                <option value="rqmc">Randomized QMC · Sobol (8 shifts)</option>
+              </select>
+            </div>
+
+            <div class="field" data-method-only="monte-carlo" hidden>
+              <label for="variance-reduction">Variance control</label>
+              <select id="variance-reduction" name="varianceReduction">
+                <option value="none">None</option>
+                <option value="antithetic" selected>Antithetic variates</option>
+                <option value="control">Discounted-stock control variate</option>
+                <option value="antithetic-control">Antithetic + control variate</option>
+              </select>
+            </div>
+
+            <div class="field" data-method-only="binomial" hidden>
+              <label for="steps">Binomial steps</label>
+              <input id="steps" name="steps" type="number" min="1" max="2000" step="1" value="500" required disabled>
+            </div>
+
+            <div class="field" data-method-only="carr-randomization" hidden>
+              <label for="carr-phases">Carr Erlang phases</label>
+              <input id="carr-phases" name="carrPhases" type="number" min="4" max="256" step="1" value="32" required disabled>
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <label class="checkbox" for="show-distribution" data-method-only="monte-carlo" hidden>
+              <input id="show-distribution" name="showDistribution" type="checkbox">
+              Show terminal-price and payoff distributions
+            </label>
+            <button id="price-button" type="submit" disabled>Loading C++ engine…</button>
+          </div>
+          <p id="form-error" class="error" role="alert"></p>
+        </form>
+
+        <aside class="panel" aria-live="polite">
+          <div id="result-panel" class="result-panel" hidden>
+            <h2>Estimated option value</h2>
+            <p id="price-output" class="price">—</p>
+            <p id="error-output" class="standard-error">—</p>
+            <dl class="result-list">
+              <div class="result-row">
+                <dt>Pricing method</dt>
+                <dd id="method-output">-</dd>
+              </div>
+              <div class="result-row">
+                <dt>Exercise style</dt>
+                <dd id="exercise-output">—</dd>
+              </div>
+              <div class="result-row">
+                <dt>Pricing engine</dt>
+                <dd id="engine-output">—</dd>
+              </div>
+              <div id="interval-row" class="result-row" hidden>
+                <dt>95% confidence interval</dt>
+                <dd id="interval-output">—</dd>
+              </div>
+              <div id="std-row" class="result-row" hidden>
+                <dt>Estimator std. deviation</dt>
+                <dd id="std-output">—</dd>
+              </div>
+              <div id="sampling-row" class="result-row" hidden>
+                <dt>Sampling</dt>
+                <dd id="sampling-output">—</dd>
+              </div>
+              <div id="variance-row" class="result-row" hidden>
+                <dt>Variance control</dt>
+                <dd id="variance-output">—</dd>
+              </div>
+              <div class="result-row">
+                <dt>Payoff function</dt>
+                <dd id="payoff-output">—</dd>
+              </div>
+              <div class="result-row">
+                <dt>Calculation time</dt>
+                <dd id="runtime-output">—</dd>
+              </div>
+              <div class="result-row">
+                <dt>Workload</dt>
+                <dd id="workload-output">—</dd>
+              </div>
+            </dl>
+          </div>
+          <div class="result-placeholder">
+            <p>Your pricing result will appear here.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section id="distribution-panel" class="panel distribution-panel" aria-label="Monte Carlo distributions" hidden>
+        <div class="distribution-heading">
+          <div>
+            <p class="eyebrow">Monte Carlo diagnostics</p>
+            <h2>Distribution and payoff</h2>
+          </div>
+          <p id="distribution-note">Representative sample of up to 5,000 terminal draws.</p>
+        </div>
+        <div class="chart-grid">
+          <figure class="chart-card">
+            <figcaption>Terminal price distribution</figcaption>
+            <canvas id="terminal-chart" role="img" aria-label="Histogram of simulated terminal prices"></canvas>
+          </figure>
+          <figure class="chart-card">
+            <figcaption>Payoff distribution at maturity</figcaption>
+            <canvas id="payoff-chart" role="img" aria-label="Histogram of simulated option payoffs"></canvas>
+          </figure>
+          <figure class="chart-card">
+            <figcaption id="payoff-chart-title">European call payoff function</figcaption>
+            <canvas id="payoff-function-chart" role="img" aria-label="European option payoff function"></canvas>
+          </figure>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

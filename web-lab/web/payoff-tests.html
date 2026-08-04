@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Executable payoff, parity, duality, and numerical benchmark tests for the local QuantKiller option pricing lab.">
+    <title>QuantKiller - Pricing Regression Tests</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="exotics.css">
+    <link rel="stylesheet" href="payoff-tests.css">
+    <script src="exotic-pricer.js?v=6" defer></script>
+    <script src="advanced-pricer.js?v=5" defer></script>
+    <script src="volatility-models.js?v=3" defer></script>
+    <script src="pricer.js?v=10" defer></script>
+    <script src="pricing-regression.js?v=2" defer></script>
+    <script src="payoff-tests.js?v=6" defer></script>
+  </head>
+  <body>
+    <main class="page-shell payoff-page">
+      <p class="eyebrow">QuantKiller - Executable Specification</p>
+      <h1>Every payoff,<br>and its identities.</h1>
+      <p class="intro">
+        These executable checks call the same payoff and pricing functions used by the lab.
+        They span calls, puts, strikes, maturities, and barrier placements; then challenge
+        parity, duality, and independent closed-form, PDE, tree, and Sobol QMC methods.
+      </p>
+
+      <nav class="lab-nav" aria-label="Pricing labs">
+        <a href="index.html">Vanilla &amp; American lab</a>
+        <a href="exotics.html">Exotic option lab</a>
+        <a href="volatility.html">Volatility surface lab</a>
+        <a href="portfolio.html">Portfolio pricer</a>
+        <a href="path-lab.html">Path distribution lab</a>
+        <a href="payoff-tests.html" aria-current="page">Tests &amp; benchmarks</a>
+        <a href="polyglot-conformance.html">Four-language conformance</a>
+      </nav>
+
+      <section class="panel test-summary" aria-live="polite" aria-labelledby="summary-title">
+        <div>
+          <p class="eyebrow">Live browser run</p>
+          <h2 id="summary-title">Checking payoff and pricing cases...</h2>
+          <p id="summary-note" class="summary-note">The checks run locally as soon as this page loads.</p>
+        </div>
+        <dl class="summary-metrics">
+          <div><dt>Passed</dt><dd id="passed-count">-</dd></div>
+          <div><dt>Total</dt><dd id="total-count">-</dd></div>
+          <div><dt>Groups</dt><dd id="payoff-count">-</dd></div>
+        </dl>
+      </section>
+
+      <nav id="payoff-index" class="payoff-index" aria-label="Payoff test index"></nav>
+      <div id="payoff-report" class="payoff-report"></div>
+      <p id="report-error" class="error report-error" role="alert"></p>
+
+      <noscript>
+        <p class="panel noscript-note">JavaScript is required to execute and display the payoff tests.</p>
+      </noscript>
+    </main>
+  </body>
+</html>

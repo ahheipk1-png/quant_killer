@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Independent local Monte Carlo and Sobol QMC path-distribution analysis under constant, term, local, Heston, and stochastic-local volatility.">
+    <title>QuantKiller - Path Distribution Lab</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="exotics.css">
+    <link rel="stylesheet" href="path-lab.css">
+    <script src="path-lab.js?v=3" defer></script>
+  </head>
+  <body>
+    <main class="page-shell path-page">
+      <p class="eyebrow">QuantKiller - Independent Simulation Session</p>
+      <h1>See the distribution,<br>at every time step.</h1>
+      <p class="intro">
+        Simulate the underlying without an option payoff. Compare pseudorandom Monte Carlo,
+        Sobol QMC, and randomized Sobol under constant, term, local, Heston, or stochastic-local volatility.
+      </p>
+
+      <nav class="lab-nav" aria-label="Pricing labs">
+        <a href="index.html">Vanilla &amp; American lab</a>
+        <a href="exotics.html">Exotic option lab</a>
+        <a href="volatility.html">Volatility surface lab</a>
+        <a href="portfolio.html">Portfolio pricer</a>
+        <a href="path-lab.html" aria-current="page">Path distribution lab</a>
+        <a href="payoff-tests.html">Tests &amp; benchmarks</a>
+        <a href="polyglot-conformance.html">Four-language conformance</a>
+      </nav>
+
+      <div class="engine-line">
+        <span class="engine-dot" aria-hidden="true"></span>
+        <span id="engine-status" data-state="ready">Independent JavaScript simulation worker ready</span>
+      </div>
+
+      <section class="path-workspace" aria-label="Path distribution simulator">
+        <form id="path-form" class="panel form-panel">
+          <div class="form-grid">
+            <div class="field engine-field">
+              <label for="sampling">Sampling method</label>
+              <select id="sampling" name="sampling">
+                <option value="mc">Pseudorandom Monte Carlo - PCG32</option>
+                <option value="qmc">Sobol QMC - deterministic</option>
+                <option value="rqmc">Randomized Sobol QMC - digital shift</option>
+              </select>
+              <p id="sampling-note" class="method-note"></p>
+            </div>
+
+            <div class="field engine-field">
+              <label for="volatilityModel">Volatility model</label>
+              <select id="volatilityModel" name="volatilityModel">
+                <option value="constant">Constant volatility</option>
+                <option value="term">Term volatility</option>
+                <option value="local">Local volatility</option>
+                <option value="heston">Heston stochastic volatility</option>
+                <option value="slv">Stochastic local volatility</option>
+              </select>
+              <p id="volatility-note" class="method-note"></p>
+            </div>
+
+            <p class="section-title">Simulation grid</p>
+            <div class="field">
+              <label for="paths">Paths</label>
+              <input id="paths" name="paths" type="number" value="10000" min="100" max="100000" step="100" required>
+            </div>
+            <div class="field">
+              <label for="timeSteps">Time steps</label>
+              <input id="timeSteps" name="timeSteps" type="number" value="100" min="1" max="520" step="1" required>
+            </div>
+            <div class="field">
+              <label for="maturity">Horizon</label>
+              <div class="input-wrap">
+                <input id="maturity" name="maturity" type="number" value="1" min="0.001" step="any" required>
+                <span class="suffix">years</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="seed">Random seed</label>
+              <input id="seed" name="seed" type="number" value="42" min="0" max="4294967295" step="1" required>
+            </div>
+
+            <p class="section-title">Market inputs</p>
+            <div class="field">
+              <label for="spot">Asset 1 spot</label>
+              <input id="spot" name="spot" type="number" value="100" min="0.0001" step="any" required>
+            </div>
+            <div class="field">
+              <label for="rate">Risk-free rate</label>
+              <div class="input-wrap">
+                <input id="rate" name="rate" type="number" value="5" step="any" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="dividendYield">Asset 1 dividend yield</label>
+              <div class="input-wrap">
+                <input id="dividendYield" name="dividendYield" type="number" value="0" step="any" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="volatility">Asset 1 initial volatility</label>
+              <div class="input-wrap">
+                <input id="volatility" name="volatility" type="number" value="20" min="0.01" step="any" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+
+            <p class="section-title">Basket construction</p>
+            <div class="field engine-field">
+              <label for="underlyingMode">Underlying series</label>
+              <select id="underlyingMode" name="underlyingMode">
+                <option value="single">Single asset</option>
+                <option value="weighted-price">Weighted sum of prices</option>
+                <option value="order-performance">Order statistic of performance</option>
+                <option value="weighted-returns">Weighted sum of returns</option>
+                <option value="return-of-weighted-sum">Return of weighted sums</option>
+              </select>
+            </div>
+            <div class="field basket-field">
+              <label for="basketAssetCount">Number of assets</label>
+              <select id="basketAssetCount" name="basketAssetCount">
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+              </select>
+            </div>
+            <div class="field basket-field">
+              <label for="series">Series to analyze</label>
+              <select id="series" name="series">
+                <option value="underlying">Effective underlying</option>
+                <option value="asset-1">Asset 1</option>
+                <option value="asset-2">Asset 2</option>
+                <option value="asset-3">Asset 3</option>
+              </select>
+            </div>
+            <div class="field basket-field">
+              <label for="basketWeights">Basket weights</label>
+              <input id="basketWeights" name="basketWeights" type="text" value="0.5, 0.3, 0.2">
+            </div>
+            <div class="field basket-field order-field">
+              <label for="basketOrder">Performance rank</label>
+              <input id="basketOrder" name="basketOrder" type="number" value="1" min="1" max="3" step="1">
+            </div>
+            <div class="field basket-field">
+              <label for="correlation">Pairwise asset correlation</label>
+              <input id="correlation" name="correlation" type="number" value="0.35" min="-0.49" max="0.999" step="0.01">
+            </div>
+            <div class="field basket-field"></div>
+            <div class="field basket-field">
+              <label for="spot2">Asset 2 spot</label>
+              <input id="spot2" name="spot2" type="number" value="95" min="0.0001" step="any">
+            </div>
+            <div class="field basket-field">
+              <label for="volatility2">Asset 2 volatility</label>
+              <div class="input-wrap"><input id="volatility2" name="volatility2" type="number" value="25" min="0.01" step="any"><span class="suffix">%</span></div>
+            </div>
+            <div class="field basket-field">
+              <label for="dividendYield2">Asset 2 dividend yield</label>
+              <div class="input-wrap"><input id="dividendYield2" name="dividendYield2" type="number" value="1" step="any"><span class="suffix">%</span></div>
+            </div>
+            <div class="field basket-field asset-three-field">
+              <label for="spot3">Asset 3 spot</label>
+              <input id="spot3" name="spot3" type="number" value="105" min="0.0001" step="any">
+            </div>
+            <div class="field basket-field asset-three-field">
+              <label for="volatility3">Asset 3 volatility</label>
+              <div class="input-wrap"><input id="volatility3" name="volatility3" type="number" value="18" min="0.01" step="any"><span class="suffix">%</span></div>
+            </div>
+            <div class="field basket-field asset-three-field">
+              <label for="dividendYield3">Asset 3 dividend yield</label>
+              <div class="input-wrap"><input id="dividendYield3" name="dividendYield3" type="number" value="2" step="any"><span class="suffix">%</span></div>
+            </div>
+
+            <p class="section-title volatility-parameter">Volatility parameters</p>
+            <div class="field term-field volatility-parameter">
+              <label for="termVolatility">Ending term volatility</label>
+              <div class="input-wrap"><input id="termVolatility" name="termVolatility" type="number" value="30" min="0.01" step="any"><span class="suffix">%</span></div>
+            </div>
+            <div class="field local-field volatility-parameter">
+              <label for="localBeta">Local-volatility beta</label>
+              <input id="localBeta" name="localBeta" type="number" value="-0.25" step="0.05">
+            </div>
+            <div class="field heston-field volatility-parameter">
+              <label for="hestonKappa">Heston mean reversion</label>
+              <input id="hestonKappa" name="hestonKappa" type="number" value="2" min="0" step="0.1">
+            </div>
+            <div class="field heston-field volatility-parameter">
+              <label for="hestonLongRunVol">Heston long-run volatility</label>
+              <div class="input-wrap"><input id="hestonLongRunVol" name="hestonLongRunVol" type="number" value="20" min="0.01" step="any"><span class="suffix">%</span></div>
+            </div>
+            <div class="field heston-field volatility-parameter">
+              <label for="hestonVolOfVol">Heston volatility of variance</label>
+              <input id="hestonVolOfVol" name="hestonVolOfVol" type="number" value="0.4" min="0" step="0.05">
+            </div>
+            <div class="field heston-field volatility-parameter">
+              <label for="hestonRho">Spot/variance correlation</label>
+              <input id="hestonRho" name="hestonRho" type="number" value="-0.6" min="-1" max="1" step="0.05">
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <p class="run-limit">Interactive limit: paths x steps &le; 8,000,000.</p>
+            <button id="run-button" type="submit">Simulate paths</button>
+          </div>
+          <p id="form-error" class="error" role="alert"></p>
+        </form>
+
+        <section class="panel analysis-panel" aria-live="polite">
+          <div id="empty-state" class="empty-analysis">
+            <p>Run a simulation to inspect the cross-sectional distribution at any time step.</p>
+          </div>
+
+          <div id="analysis" hidden>
+            <header class="analysis-header">
+              <div>
+                <p class="eyebrow">Current cross-section</p>
+                <h2 id="analysis-title">Distribution at t = 1.0000</h2>
+                <p id="run-caption" class="method-note"></p>
+              </div>
+              <button id="download-button" class="secondary-button" type="button">Download this slice</button>
+            </header>
+
+            <div class="inspection-controls">
+              <div class="field step-field">
+                <label for="step-slider">Inspection time: <strong id="time-label">1.0000 years</strong></label>
+                <input id="step-slider" type="range" min="0" max="100" value="100" step="1">
+                <div class="range-labels"><span>t = 0</span><span id="maturity-label">t = 1.0000</span></div>
+              </div>
+              <div class="field">
+                <label for="metric">Displayed variable</label>
+                <select id="metric">
+                  <option value="level">Underlying level S(t)</option>
+                  <option value="simple-return">Simple return S(t)/S(0) - 1</option>
+                  <option value="log-return">Log return ln(S(t)/S(0))</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="threshold">Probability threshold</label>
+                <input id="threshold" type="number" value="100" step="any">
+              </div>
+              <div class="field">
+                <label for="histogram-bins">Histogram bins</label>
+                <input id="histogram-bins" type="number" value="50" min="10" max="120" step="1">
+              </div>
+            </div>
+
+            <dl class="distribution-stats">
+              <div><dt>Mean</dt><dd id="stat-mean">-</dd></div>
+              <div><dt>Median</dt><dd id="stat-median">-</dd></div>
+              <div><dt>Std. deviation</dt><dd id="stat-std">-</dd></div>
+              <div><dt>Skewness</dt><dd id="stat-skew">-</dd></div>
+              <div><dt>Excess kurtosis</dt><dd id="stat-kurtosis">-</dd></div>
+              <div><dt>1% / 99%</dt><dd id="stat-tail">-</dd></div>
+              <div><dt>5% / 95%</dt><dd id="stat-range">-</dd></div>
+              <div><dt id="probability-label">P(X &le; 100)</dt><dd id="stat-probability">-</dd></div>
+            </dl>
+
+            <section class="chart-card histogram-card">
+              <div class="chart-heading"><h3>Distribution at selected time</h3><p id="histogram-caption"></p></div>
+              <canvas id="histogram-chart" width="920" height="360" role="img" aria-label="Histogram of the simulated underlying distribution"></canvas>
+            </section>
+            <section class="chart-card">
+              <div class="chart-heading"><h3>Distribution through time</h3><p>1/99%, 5/95%, 25/75%, and median quantile bands.</p></div>
+              <canvas id="fan-chart" width="920" height="360" role="img" aria-label="Quantile fan chart through simulation time"></canvas>
+            </section>
+            <section class="chart-card">
+              <div class="chart-heading"><h3>Representative paths</h3><p>First 24 simulated paths; diagnostic only.</p></div>
+              <canvas id="path-chart" width="920" height="300" role="img" aria-label="Representative simulated paths"></canvas>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

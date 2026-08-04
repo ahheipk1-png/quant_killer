@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-test-state="running">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Executable four-language numerical conformance tests for QuantKiller's C++, Rust, Python, and C# browser pricing engines.">
+    <title>QuantKiller - Four-Language Conformance</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="exotics.css">
+    <link rel="stylesheet" href="payoff-tests.css">
+    <link rel="stylesheet" href="polyglot-conformance.css">
+    <script src="exotic-pricer.js?v=6" defer></script>
+    <script src="advanced-pricer.js?v=5" defer></script>
+    <script src="polyglot-contract.js?v=2" defer></script>
+    <script src="polyglot-conformance.js?v=3" defer></script>
+  </head>
+  <body>
+    <main class="page-shell payoff-page conformance-page">
+      <p class="eyebrow">QuantKiller - Cross-Language Contract</p>
+      <h1>Four engines,<br>one numerical result.</h1>
+      <p class="intro">
+        Identical packed parameters, PCG random streams, paths, seeds, payoffs, and volatility models
+        are executed independently in C++, Rust, Python, and C#. The public result contract requires
+        exact equality at eight decimal places for price, standard error, and standard deviation.
+      </p>
+
+      <nav class="lab-nav" aria-label="Pricing labs">
+        <a href="index.html">Vanilla &amp; American lab</a>
+        <a href="exotics.html">Exotic option lab</a>
+        <a href="volatility.html">Volatility surface lab</a>
+        <a href="portfolio.html">Portfolio pricer</a>
+        <a href="path-lab.html">Path distribution lab</a>
+        <a href="payoff-tests.html">Tests &amp; benchmarks</a>
+        <a href="polyglot-conformance.html" aria-current="page">Four-language conformance</a>
+      </nav>
+
+      <section class="panel test-summary" aria-live="polite" aria-labelledby="summary-title">
+        <div>
+          <p class="eyebrow">Live browser run</p>
+          <h2 id="summary-title">Loading all four local engines...</h2>
+          <p id="summary-note" class="summary-note">Python and C# have larger first-load runtimes; every calculation remains on this device.</p>
+        </div>
+        <dl class="summary-metrics">
+          <div><dt>Passed</dt><dd id="passed-count">-</dd></div>
+          <div><dt>Cases</dt><dd id="total-count">-</dd></div>
+          <div><dt>Engines</dt><dd id="engine-count">-</dd></div>
+        </dl>
+      </section>
+
+      <ul id="engine-load-status" class="engine-load-status" aria-label="Engine loading status">
+        <li id="engine-cpp" data-state="working">C++: <span>waiting</span></li>
+        <li id="engine-rust" data-state="working">Rust: <span>waiting</span></li>
+        <li id="engine-python" data-state="working">Python: <span>waiting</span></li>
+        <li id="engine-csharp" data-state="working">C#: <span>waiting</span></li>
+      </ul>
+
+      <section class="panel conformance-panel" aria-label="Cross-language test results">
+        <div class="table-wrap">
+          <table class="benchmark-table payoff-table">
+            <thead>
+              <tr>
+                <th>Test case</th>
+                <th>Contract</th>
+                <th>C++</th>
+                <th>Rust</th>
+                <th>Python</th>
+                <th>C#</th>
+                <th>Raw spread</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody id="conformance-body"></tbody>
+          </table>
+        </div>
+      </section>
+      <p class="precision-note">
+        “Exact” means the four independently computed IEEE-754 values serialize to the same fixed
+        eight-decimal public result. Raw spreads are also displayed so sub-decimal runtime differences
+        cannot be hidden. Bit-for-bit equality is not portable across different standard math libraries.
+      </p>
+      <p id="report-error" class="error report-error" role="alert"></p>
+    </main>
+  </body>
+</html>

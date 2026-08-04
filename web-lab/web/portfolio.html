@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Build and price a portfolio of vanilla and exotic option deals locally in one batch.">
+    <title>QuantKiller - Portfolio Batch Pricer</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="exotics.css">
+    <link rel="stylesheet" href="payoff-tests.css">
+    <link rel="stylesheet" href="portfolio.css">
+    <script src="exotic-pricer.js?v=6" defer></script>
+    <script src="advanced-pricer.js?v=5" defer></script>
+    <script src="portfolio.js?v=3" defer></script>
+  </head>
+  <body>
+    <main class="page-shell portfolio-page">
+      <p class="eyebrow">QuantKiller - Portfolio Workspace</p>
+      <h1>Price many deals,<br>in one local batch.</h1>
+      <p class="intro">
+        Assemble vanilla and exotic positions with a pricing method per deal, then run the portfolio
+        without sending terms away. Quantities can be positive or negative, and the total present value
+        updates from the individual results.
+      </p>
+
+      <nav class="lab-nav" aria-label="Pricing labs">
+        <a href="index.html">Vanilla &amp; American lab</a>
+        <a href="exotics.html">Exotic option lab</a>
+        <a href="volatility.html">Volatility surface lab</a>
+        <a href="portfolio.html" aria-current="page">Portfolio pricer</a>
+        <a href="path-lab.html">Path distribution lab</a>
+        <a href="payoff-tests.html">Tests &amp; benchmarks</a>
+        <a href="polyglot-conformance.html">Four-language conformance</a>
+      </nav>
+
+      <div class="portfolio-layout">
+        <section class="panel deal-editor" aria-labelledby="editor-title">
+          <div class="editor-heading">
+            <div>
+              <p class="eyebrow">Deal ticket</p>
+              <h2 id="editor-title">Add a position</h2>
+              <p id="editor-note">Product defaults can be refined with optional JSON parameters.</p>
+            </div>
+          </div>
+
+          <form id="deal-form">
+            <div class="compact-grid">
+              <div class="field field-wide">
+                <label for="deal-name">Deal name</label>
+                <input id="deal-name" name="dealName" value="New deal" required>
+              </div>
+              <div class="field">
+                <label for="product">Product</label>
+                <select id="product" name="product"></select>
+              </div>
+              <div class="field">
+                <label for="method">Pricing method</label>
+                <select id="method" name="method"></select>
+              </div>
+              <div class="field">
+                <label for="option-type">Option type</label>
+                <select id="option-type" name="optionType">
+                  <option value="call">Call</option>
+                  <option value="put">Put</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="quantity">Quantity</label>
+                <input id="quantity" name="quantity" type="number" step="any" value="1" required>
+              </div>
+              <div class="field">
+                <label for="spot">Spot</label>
+                <input id="spot" name="spot" type="number" min="0.000001" step="any" value="100" required>
+              </div>
+              <div class="field">
+                <label for="strike">Strike</label>
+                <input id="strike" name="strike" type="number" min="0.000001" step="any" value="100" required>
+              </div>
+              <div class="field">
+                <label for="maturity">Maturity</label>
+                <input id="maturity" name="maturity" type="number" min="0.000001" step="any" value="1" required>
+              </div>
+              <div class="field">
+                <label for="volatility">Volatility (%)</label>
+                <input id="volatility" name="volatility" type="number" min="0.000001" step="any" value="20" required>
+              </div>
+              <div class="field">
+                <label for="rate">Risk-free rate (%)</label>
+                <input id="rate" name="rate" type="number" step="any" value="5" required>
+              </div>
+              <div class="field">
+                <label for="dividend-yield">Dividend yield (%)</label>
+                <input id="dividend-yield" name="dividendYield" type="number" step="any" value="0" required>
+              </div>
+              <div class="field">
+                <label for="paths">MC / QMC paths</label>
+                <input id="paths" name="paths" type="number" min="100" max="500000" step="1" value="32768" required>
+              </div>
+              <div class="field">
+                <label for="seed">Random seed</label>
+                <input id="seed" name="seed" type="number" step="1" value="42" required>
+              </div>
+              <div class="field field-wide">
+                <label for="overrides">Optional product parameters (JSON)</label>
+                <textarea id="overrides" name="overrides" spellcheck="false" placeholder='{"barrier": 130, "barrierDirection": "up", "barrierStyle": "out"}'></textarea>
+                <p id="method-help" class="method-note method-help"></p>
+              </div>
+            </div>
+            <p id="form-error" class="error" role="alert"></p>
+            <div class="editor-actions">
+              <button id="save-deal" type="submit">Add deal</button>
+              <button id="cancel-edit" class="button-secondary" type="button" hidden>Cancel edit</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel portfolio-panel" aria-labelledby="portfolio-title">
+          <div class="portfolio-heading">
+            <div>
+              <p class="eyebrow">Batch valuation</p>
+              <h2 id="portfolio-title">Portfolio</h2>
+              <p>Each row retains its own product, method, quantity, market data, and model parameters.</p>
+            </div>
+            <div class="portfolio-actions">
+              <button id="load-sample" class="button-secondary" type="button">Load sample</button>
+              <button id="export-csv" class="button-secondary" type="button">Export CSV</button>
+              <button id="clear-portfolio" class="button-danger" type="button">Clear</button>
+              <button id="price-portfolio" type="button">Price portfolio</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="benchmark-table portfolio-table">
+              <thead>
+                <tr>
+                  <th>Deal</th>
+                  <th>Product / method</th>
+                  <th>Qty</th>
+                  <th>Unit PV</th>
+                  <th>Std. error</th>
+                  <th>Position PV</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="portfolio-body"></tbody>
+            </table>
+            <p id="portfolio-empty" class="portfolio-empty">No deals yet. Add a deal or load the sample portfolio.</p>
+          </div>
+
+          <dl class="portfolio-summary">
+            <div><dt>Deals</dt><dd id="deal-count">0</dd></div>
+            <div><dt>Priced</dt><dd id="priced-count">0</dd></div>
+            <div><dt>Total PV</dt><dd id="portfolio-pv">—</dd></div>
+            <div><dt>Runtime</dt><dd id="portfolio-runtime">—</dd></div>
+          </dl>
+          <p id="batch-status" class="batch-status" aria-live="polite"></p>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

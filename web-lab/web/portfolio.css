@@ -1,0 +1,178 @@
+.portfolio-page {
+  max-width: 1500px;
+}
+
+.portfolio-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.72fr) minmax(660px, 1.55fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.deal-editor {
+  position: sticky;
+  top: 1.25rem;
+}
+
+.deal-editor h2,
+.portfolio-panel h2 {
+  margin: 0;
+}
+
+.editor-heading,
+.portfolio-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1.25rem;
+}
+
+.editor-heading p,
+.portfolio-heading p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+
+.compact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.compact-grid .field-wide {
+  grid-column: 1 / -1;
+}
+
+.deal-editor textarea {
+  width: 100%;
+  min-height: 110px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  background: var(--background);
+  color: var(--text);
+  padding: 10px 12px;
+  resize: vertical;
+  font: 0.84rem/1.5 "Cascadia Code", Consolas, monospace;
+}
+
+.deal-editor textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(94, 225, 194, 0.12);
+}
+
+.editor-actions,
+.portfolio-actions,
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.editor-actions {
+  margin-top: 1.25rem;
+}
+
+.button-secondary,
+.button-danger,
+.row-button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+.button-danger {
+  color: #ff9b9b;
+}
+
+.row-button {
+  min-width: 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.45rem;
+  font-size: 0.78rem;
+}
+
+.portfolio-panel {
+  min-width: 0;
+}
+
+.portfolio-table {
+  min-width: 1050px;
+}
+
+.portfolio-table .deal-title {
+  min-width: 150px;
+  font-weight: 650;
+}
+
+.portfolio-table .deal-subtitle {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+.portfolio-table .error-cell {
+  color: #ff9b9b;
+}
+
+.portfolio-empty {
+  padding: 3rem 1.25rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.portfolio-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.portfolio-summary div {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+}
+
+.portfolio-summary dt {
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.portfolio-summary dd {
+  margin: 0.4rem 0 0;
+  font-size: clamp(1.15rem, 2vw, 1.6rem);
+}
+
+.batch-status {
+  min-height: 1.5rem;
+  margin: 1rem 0 0;
+  color: var(--muted);
+}
+
+.method-help {
+  min-height: 2.5rem;
+}
+
+@media (max-width: 1050px) {
+  .portfolio-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .deal-editor {
+    position: static;
+  }
+}
+
+@media (max-width: 620px) {
+  .compact-grid,
+  .portfolio-summary {
+    grid-template-columns: 1fr;
+  }
+}

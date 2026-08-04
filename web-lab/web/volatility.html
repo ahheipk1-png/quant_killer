@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Local implied-volatility inversion, SVI/SSVI, SABR, Vanna-Volga, constrained convex fitting, Dupire local-volatility, and SLV calibration lab.">
+    <title>QuantKiller - Volatility Surface Lab</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="exotics.css">
+    <link rel="stylesheet" href="volatility.css">
+    <script src="exotic-pricer.js?v=6" defer></script>
+    <script src="volatility-models.js?v=3" defer></script>
+    <script src="volatility-lab.js?v=3" defer></script>
+  </head>
+  <body>
+    <main class="page-shell volatility-page">
+      <p class="eyebrow">QuantKiller - Market Calibration</p>
+      <h1>Fit the smile.<br>Audit the surface.</h1>
+      <p class="intro">
+        Turn option prices or implied-volatility quotes into fitted smiles, a calendar surface,
+        Dupire local volatility, and a particle-calibrated stochastic-local leverage function.
+        Everything runs locally in this browser.
+      </p>
+
+      <nav class="lab-nav" aria-label="Pricing labs">
+        <a href="index.html">Vanilla &amp; American lab</a>
+        <a href="exotics.html">Exotic option lab</a>
+        <a href="volatility.html" aria-current="page">Volatility surface lab</a>
+        <a href="portfolio.html">Portfolio pricer</a>
+        <a href="path-lab.html">Path distribution lab</a>
+        <a href="payoff-tests.html">Tests &amp; benchmarks</a>
+        <a href="polyglot-conformance.html">Four-language conformance</a>
+      </nav>
+
+      <div class="engine-line">
+        <span class="engine-dot" aria-hidden="true"></span>
+        <span id="engine-status" data-state="ready">Local calibration engine ready</span>
+      </div>
+
+      <section class="vol-workspace" aria-label="Volatility surface calibration workspace">
+        <form id="volatility-form" class="panel calibration-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Inputs</p><h2>Market and fitter</h2></div>
+            <button id="restore-sample" type="button" class="secondary-button">Restore sample</button>
+          </div>
+
+          <div class="form-grid compact-grid">
+            <div class="field">
+              <label for="spot">Spot</label>
+              <input id="spot" name="spot" type="number" value="100" min="0.0001" step="any" required>
+            </div>
+            <div class="field">
+              <label for="rate">Risk-free rate</label>
+              <div class="input-wrap"><input id="rate" name="rate" type="number" value="4" step="any"><span class="suffix">%</span></div>
+            </div>
+            <div class="field">
+              <label for="dividendYield">Dividend yield</label>
+              <div class="input-wrap"><input id="dividendYield" name="dividendYield" type="number" value="1" step="any"><span class="suffix">%</span></div>
+            </div>
+            <div class="field">
+              <label for="fitMethod">Smile / surface model</label>
+              <select id="fitMethod" name="fitMethod">
+                <option value="raw-svi">Raw SVI</option>
+                <option value="natural-svi">Natural SVI</option>
+                <option value="svi-jw">SVI jump-wings</option>
+                <option value="ssvi">Power-law SSVI</option>
+                <option value="sabr">Hagan lognormal SABR</option>
+                <option value="vanna-volga">Vanna-Volga</option>
+                <option value="pchip-variance">PCHIP total variance</option>
+                <option value="cvi">CVI convex variance spline (QP)</option>
+                <option value="convex-call">Constrained convex call prices</option>
+                <option value="dumas">Dumas polynomial surface</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="termMethod">Maturity interpolation</label>
+              <select id="termMethod" name="termMethod" aria-describedby="term-method-help">
+                <option value="pchip-total-variance">Monotone PCHIP total variance</option>
+                <option value="linear-total-variance">Linear total variance</option>
+                <option value="linear-volatility">Linear implied volatility</option>
+              </select>
+              <p id="term-method-help" class="method-note"></p>
+            </div>
+            <div class="field">
+              <label for="sabrBeta">SABR beta</label>
+              <input id="sabrBeta" name="sabrBeta" type="number" value="0.5" min="0" max="1" step="0.05">
+            </div>
+            <div class="field">
+              <label for="cviKnots">CVI knots per expiry</label>
+              <input id="cviKnots" name="cviKnots" type="number" value="13" min="5" max="21" step="2">
+            </div>
+            <div class="field">
+              <label for="cviRegularization">CVI strike regularization</label>
+              <input id="cviRegularization" name="cviRegularization" type="number" value="0.05" min="0" max="2" step="0.01">
+            </div>
+            <div class="field">
+              <label for="targetMaturity">Target maturity</label>
+              <input id="targetMaturity" name="targetMaturity" type="number" value="1" min="0.001" step="any">
+            </div>
+            <div class="field">
+              <label for="targetStrike">Target strike</label>
+              <input id="targetStrike" name="targetStrike" type="number" value="105" min="0.0001" step="any">
+            </div>
+            <label class="checkbox engine-field" for="repairCalendar">
+              <input id="repairCalendar" name="repairCalendar" type="checkbox" checked>
+              Repair decreasing total-variance pillars before maturity interpolation
+            </label>
+          </div>
+
+          <div class="field quote-field">
+            <label for="quotes">Market quotes - CSV: maturity, strike, iv; bidiv/askiv; or price/type</label>
+            <textarea id="quotes" name="quotes" spellcheck="false" aria-describedby="quote-help"></textarea>
+            <p id="quote-help" class="method-note">Volatility can be entered as 0.22 or 22. Optional weight, bidiv, and askiv columns are supported.</p>
+          </div>
+
+          <div class="form-footer">
+            <p id="fit-error" class="error" role="alert"></p>
+            <button id="fit-surface" type="submit">Fit volatility surface</button>
+          </div>
+        </form>
+
+        <aside class="panel result-panel surface-summary" aria-live="polite">
+          <p class="eyebrow">Calibrated query</p>
+          <h2 id="target-volatility">-</h2>
+          <p id="target-label" class="result-subtitle">Fit the sample surface to begin.</p>
+          <dl class="surface-metrics">
+            <div><dt>Quote RMSE</dt><dd id="fit-rmse">-</dd></div>
+            <div><dt>Maximum error</dt><dd id="fit-max-error">-</dd></div>
+            <div><dt>Dupire local vol</dt><dd id="target-local-vol">-</dd></div>
+            <div><dt>Butterfly flags</dt><dd id="butterfly-count">-</dd></div>
+            <div><dt>Calendar flags</dt><dd id="calendar-count">-</dd></div>
+            <div><dt>Quotes / expiries</dt><dd id="surface-shape">-</dd></div>
+          </dl>
+          <p class="model-warning">
+            CVI follows Deschâtres's published variance-spline and sequential constrained-QP construction.
+            This browser research solver is independent of Volptima's production Clarabel/Rust implementation.
+          </p>
+        </aside>
+      </section>
+
+      <section id="surface-output" class="output-stack" hidden>
+        <div class="panel chart-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Smile view</p><h2>Market vs fitted volatility</h2></div>
+            <label class="chart-selector" for="chartMaturity">Expiry
+              <select id="chartMaturity"></select>
+            </label>
+          </div>
+          <canvas id="smile-chart" width="1040" height="410" role="img" aria-label="Market and fitted implied-volatility smile"></canvas>
+        </div>
+
+        <div class="output-grid">
+          <section class="panel table-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Fit detail</p><h2>Quote residuals</h2></div></div>
+            <div class="table-wrap"><table class="calibration-table">
+              <thead><tr><th>T</th><th>Strike</th><th>Market IV</th><th>Model IV</th><th>Residual</th></tr></thead>
+              <tbody id="fit-table-body"></tbody>
+            </table></div>
+          </section>
+          <section class="panel table-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Parameters</p><h2>Calibrated model</h2></div></div>
+            <div class="table-wrap"><table class="calibration-table">
+              <thead><tr><th>Expiry</th><th>Representation</th><th>Parameters</th></tr></thead>
+              <tbody id="parameter-table-body"></tbody>
+            </table></div>
+          </section>
+        </div>
+
+        <section class="panel table-panel">
+          <div class="panel-heading"><div><p class="eyebrow">Dupire extraction</p><h2>Local-volatility grid</h2></div></div>
+          <div class="table-wrap"><table class="calibration-table local-table">
+            <thead><tr><th>T</th><th>Log-moneyness</th><th>Strike</th><th>Implied vol</th><th>Local vol</th><th>Dupire denominator</th><th>Status</th></tr></thead>
+            <tbody id="local-vol-table-body"></tbody>
+          </table></div>
+        </section>
+
+        <section class="panel slv-panel">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Stochastic-local volatility</p><h2>Particle leverage calibration</h2></div>
+            <button id="calibrate-slv" type="button">Calibrate SLV leverage</button>
+          </div>
+          <p class="section-copy">Calibrate L(t,S) = local-vol(t,S) / sqrt(E[V(t) | S(t)=S]) using seeded Heston particles and kernel conditional-variance estimates.</p>
+          <div class="form-grid slv-controls">
+            <div class="field"><label for="slvParticles">Particles</label><input id="slvParticles" type="number" value="4000" min="100" max="50000" step="100"></div>
+            <div class="field"><label for="slvSteps">Time steps</label><input id="slvSteps" type="number" value="12" min="2" max="60" step="1"></div>
+            <div class="field"><label for="hestonKappa">Kappa</label><input id="hestonKappa" type="number" value="2" min="0" step="any"></div>
+            <div class="field"><label for="hestonTheta">Long-run variance</label><input id="hestonTheta" type="number" value="0.04" min="0.000001" step="any"></div>
+            <div class="field"><label for="hestonVolOfVol">Vol of vol</label><input id="hestonVolOfVol" type="number" value="0.4" min="0" step="any"></div>
+            <div class="field"><label for="hestonRho">Spot/variance rho</label><input id="hestonRho" type="number" value="-0.6" min="-1" max="1" step="any"></div>
+          </div>
+          <p id="slv-status" class="method-note">Fit a surface first, then run the particle calibration.</p>
+          <div id="slv-output" class="table-wrap" hidden><table class="calibration-table">
+            <thead><tr><th>Log-moneyness</th><th>Conditional vol</th><th>Leverage</th><th>Reproduced local vol</th></tr></thead>
+            <tbody id="slv-table-body"></tbody>
+          </table></div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

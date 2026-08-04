@@ -1,0 +1,276 @@
+.payoff-page {
+  padding-bottom: 80px;
+}
+
+.test-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  margin-top: 28px;
+  padding: 28px;
+  border-color: rgba(94, 225, 194, 0.45);
+  background:
+    radial-gradient(circle at 92% 20%, rgba(94, 225, 194, 0.13), transparent 34%),
+    var(--panel);
+}
+
+.test-summary h2 {
+  margin: 2px 0 8px;
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
+  letter-spacing: -0.035em;
+}
+
+.summary-note {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(80px, 1fr));
+  gap: 10px;
+  min-width: 340px;
+  margin: 0;
+}
+
+.summary-metrics div {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: rgba(4, 16, 29, 0.45);
+}
+
+.summary-metrics dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.summary-metrics dd {
+  margin: 5px 0 0;
+  color: var(--accent);
+  font-size: 1.65rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-test-state="failed"] .test-summary {
+  border-color: rgba(255, 139, 139, 0.6);
+}
+
+html[data-test-state="failed"] .summary-metrics dd {
+  color: var(--danger);
+}
+
+.payoff-index {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 24px 0;
+}
+
+.payoff-index a {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  padding: 7px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.payoff-index a:hover,
+.payoff-index a:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.payoff-report {
+  display: grid;
+  gap: 20px;
+}
+
+.payoff-card {
+  padding: 0;
+  overflow: hidden;
+  scroll-margin-top: 18px;
+}
+
+.payoff-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 24px 26px 18px;
+}
+
+.payoff-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.payoff-number {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.payoff-heading h2 {
+  margin: 2px 0 0;
+  font-size: clamp(1.2rem, 2.5vw, 1.65rem);
+  letter-spacing: -0.025em;
+}
+
+.group-status {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(94, 225, 194, 0.12);
+  color: var(--accent);
+  padding: 7px 11px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.group-status.fail {
+  background: rgba(255, 139, 139, 0.12);
+  color: var(--danger);
+}
+
+.payoff-definition {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(240px, 0.9fr);
+  gap: 24px;
+  margin: 0 26px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 15px 17px;
+  background: rgba(4, 16, 29, 0.42);
+}
+
+.payoff-formula,
+.payoff-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.payoff-formula code {
+  color: var(--text);
+  font-family: inherit;
+}
+
+.definition-label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.payoff-table th,
+.payoff-table td {
+  vertical-align: top;
+}
+
+.payoff-table th:first-child,
+.payoff-table td:first-child,
+.payoff-table th:nth-child(2),
+.payoff-table td:nth-child(2),
+.payoff-table th:last-child,
+.payoff-table td:last-child {
+  text-align: left;
+}
+
+.payoff-table th:nth-child(3),
+.payoff-table td:nth-child(3),
+.payoff-table th:nth-child(4),
+.payoff-table td:nth-child(4) {
+  text-align: right;
+}
+
+.payoff-table td:first-child {
+  min-width: 205px;
+  color: var(--text);
+  font-weight: 700;
+  white-space: normal;
+}
+
+.payoff-table td:nth-child(2) {
+  min-width: 330px;
+  white-space: normal;
+}
+
+.payoff-table td:last-child {
+  min-width: 330px;
+}
+
+.input-code {
+  color: #b8c9dc;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.numeric-cell,
+.status-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+.report-error {
+  margin-top: 18px;
+}
+
+.noscript-note {
+  margin-top: 20px;
+  padding: 20px;
+  color: var(--danger);
+}
+
+@media (max-width: 820px) {
+  .test-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .summary-metrics {
+    min-width: 0;
+  }
+
+  .payoff-definition {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 560px) {
+  .summary-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .payoff-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .payoff-definition {
+    margin-inline: 18px;
+  }
+}

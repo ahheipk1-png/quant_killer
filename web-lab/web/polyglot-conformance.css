@@ -1,0 +1,56 @@
+.conformance-page {
+  max-width: 1500px;
+}
+
+.engine-load-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.25rem 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.engine-load-status li {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  color: var(--muted);
+}
+
+.engine-load-status li::before {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.5rem;
+  border-radius: 50%;
+  background: #f4c95d;
+}
+
+.engine-load-status li[data-state="ready"]::before {
+  background: var(--accent);
+}
+
+.engine-load-status li[data-state="error"]::before {
+  background: #ff7b7b;
+}
+
+.conformance-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.conformance-panel .table-wrap {
+  margin: 0;
+}
+
+.conformance-panel table {
+  min-width: 1180px;
+}
+
+.precision-note {
+  margin-top: 1rem;
+  color: var(--muted);
+  line-height: 1.65;
+}

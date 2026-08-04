@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A local polyglot browser lab for exotic and path-dependent pricing under constant, term, local, Heston, and stochastic-local volatility.">
+    <title>QuantKiller · Exotic Option Lab</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="exotics.css">
+    <script src="polyglot-contract.js" defer></script>
+    <script src="exotics.js?v=6" defer></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <p class="eyebrow">QuantKiller · Polyglot Exotic Lab</p>
+      <h1>Path dependence,<br>made testable.</h1>
+      <p class="intro">
+        Price vanilla reductions, Asians, barriers, Bermudans, baskets, compound options,
+        autocalls, Phoenix and yield notes, accumulators, and volatility products locally.
+        Compare JavaScript reference methods with C++, Rust, Python, and C# WebAssembly engines.
+      </p>
+
+      <nav class="lab-nav" aria-label="Pricing labs">
+        <a href="index.html">Vanilla &amp; American lab</a>
+        <a href="exotics.html" aria-current="page">Exotic option lab</a>
+        <a href="volatility.html">Volatility surface lab</a>
+        <a href="portfolio.html">Portfolio pricer</a>
+        <a href="path-lab.html">Path distribution lab</a>
+        <a href="payoff-tests.html">Tests &amp; benchmarks</a>
+        <a href="polyglot-conformance.html">Four-language conformance</a>
+      </nav>
+
+      <div class="engine-line">
+        <span class="engine-dot" aria-hidden="true"></span>
+        <span id="engine-status" data-state="working">Loading JavaScript reference engine…</span>
+      </div>
+
+      <section class="workspace" aria-label="Exotic option pricer">
+        <form id="exotic-form" class="panel form-panel">
+          <div class="form-grid">
+            <div class="field engine-field">
+              <label for="language">Pricing language</label>
+              <select id="language" name="language">
+                <option value="js">JavaScript · reference formulas / PDE / MC / QMC</option>
+                <option value="cpp">C++ · WebAssembly Monte Carlo</option>
+                <option value="rust">Rust · WebAssembly Monte Carlo</option>
+                <option value="python">Python · Pyodide Monte Carlo</option>
+                <option value="csharp">C# · .NET WebAssembly Monte Carlo</option>
+              </select>
+              <p id="language-note" class="method-note"></p>
+            </div>
+
+            <div class="field engine-field">
+              <label for="product">Product family</label>
+              <select id="product" name="product">
+                <option value="digital">Digital / binary</option>
+                <option value="barrier">Single barrier</option>
+                <option value="double-barrier">Double barrier</option>
+                <option value="bermudan">Bermudan</option>
+                <option value="american">American vanilla · PDE</option>
+                <option value="rainbow">Rainbow / order statistic</option>
+                <option value="autocallable">Autocallable note</option>
+                <option value="phoenix-autocall">Phoenix autocall</option>
+                <option value="yield-seeker">Yield seeker note</option>
+                <option value="himalayan">Himalayan</option>
+                <option value="asian">Discrete arithmetic Asian</option>
+                <option value="lookback">Lookback</option>
+                <option value="ladder">Ladder</option>
+                <option value="compound">Compound · all four combinations</option>
+                <option value="variance-swap">Variance swap</option>
+                <option value="volatility-swap">Volatility swap</option>
+                <option value="variance-option">Option on variance</option>
+                <option value="volatility-option">Option on volatility</option>
+                <option value="accumulator">Accumulator</option>
+              </select>
+            </div>
+
+            <div class="field engine-field">
+              <label for="volatilityModel">Volatility model</label>
+              <select id="volatilityModel" name="volatilityModel">
+                <option value="constant">Constant volatility</option>
+                <option value="term">Term volatility</option>
+                <option value="local">Local volatility</option>
+                <option value="heston">Heston stochastic volatility</option>
+                <option value="slv">Stochastic local volatility</option>
+              </select>
+              <p id="volatility-note" class="method-note"></p>
+            </div>
+
+            <div class="field engine-field">
+              <label for="method">Pricing method</label>
+              <select id="method" name="method"></select>
+              <p id="method-note" class="method-note"></p>
+            </div>
+
+            <p id="product-note" class="product-note"></p>
+
+            <div class="field" id="option-type-field">
+              <label for="optionType">Option type</label>
+              <select id="optionType" name="optionType">
+                <option value="call">Call</option>
+                <option value="put">Put</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="spot">Asset 1 spot</label>
+              <input id="spot" name="spot" type="number" value="100" min="0.0001" step="any" required>
+            </div>
+
+            <div class="field">
+              <label for="strike">Strike price</label>
+              <input id="strike" name="strike" type="number" value="100" min="0" step="any" required>
+            </div>
+
+            <div class="field">
+              <label for="maturity">Time to maturity</label>
+              <div class="input-wrap">
+                <input id="maturity" name="maturity" type="number" value="1" min="0.001" step="any" required>
+                <span class="suffix">years</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="rate">Risk-free rate</label>
+              <div class="input-wrap">
+                <input id="rate" name="rate" type="number" value="5" step="any" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="dividendYield">Asset 1 dividend yield</label>
+              <div class="input-wrap">
+                <input id="dividendYield" name="dividendYield" type="number" value="0" step="any" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="volatility">Asset 1 initial volatility</label>
+              <div class="input-wrap">
+                <input id="volatility" name="volatility" type="number" value="20" min="0.01" step="any" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+
+            <p class="section-title">Volatility parameters</p>
+            <div id="volatility-fields" class="form-grid engine-field"></div>
+
+            <p class="section-title">Product parameters</p>
+            <div id="product-fields" class="form-grid engine-field"></div>
+
+            <p class="section-title">Effective underlying / basket</p>
+            <div class="field engine-field">
+              <label for="underlyingMode">Underlying construction</label>
+              <select id="underlyingMode" name="underlyingMode">
+                <option value="single">Single asset</option>
+                <option value="weighted-price">Weighted sum of prices</option>
+                <option value="order-performance">Order statistic of performances</option>
+                <option value="weighted-returns">Weighted sum of returns</option>
+                <option value="return-of-weighted-sum">Return of weighted price sum</option>
+              </select>
+              <p class="method-note">The constructed basket becomes the underlying path for every compatible payoff. Rainbow and Himalayan retain their native multi-asset payoff.</p>
+            </div>
+            <div id="basket-fields" class="form-grid engine-field"></div>
+
+            <div class="field" data-numeric-field="simulation">
+              <label for="paths">Simulation paths</label>
+              <input id="paths" name="paths" type="number" value="50000" min="100" max="500000" step="1">
+            </div>
+
+            <div class="field" data-numeric-field="simulation">
+              <label for="seed">Random seed</label>
+              <input id="seed" name="seed" type="number" value="42" min="0" step="1">
+            </div>
+
+            <div class="field" data-numeric-field="pde" hidden>
+              <label for="pdeGrid">PDE spot grid</label>
+              <input id="pdeGrid" name="pdeGrid" type="number" value="96" min="40" max="400" step="1">
+            </div>
+
+            <div class="field" data-numeric-field="pde" hidden>
+              <label for="pdeGridType">Spatial grid</label>
+              <select id="pdeGridType" name="pdeGridType">
+                <option value="uniform">Uniform</option>
+                <option value="sinh-strike" selected>Sinh · clustered at strike</option>
+                <option value="sinh-spot">Sinh · clustered at spot</option>
+              </select>
+            </div>
+
+            <div class="field" data-numeric-field="pde" hidden>
+              <label for="pdeGridConcentration">Grid concentration</label>
+              <input id="pdeGridConcentration" name="pdeGridConcentration" type="number" value="0.12" min="0.01" max="1" step="0.01">
+            </div>
+
+            <div class="field" data-numeric-field="pde" hidden>
+              <label for="pdePayoffSmoothing">Payoff smoothing</label>
+              <select id="pdePayoffSmoothing" name="pdePayoffSmoothing">
+                <option value="cell-average" selected>Cell-average smoothing</option>
+                <option value="none">None</option>
+              </select>
+            </div>
+
+            <div class="field" data-numeric-field="pde" hidden>
+              <label for="pdeRannacherSteps">Rannacher damping intervals</label>
+              <select id="pdeRannacherSteps" name="pdeRannacherSteps">
+                <option value="0">None</option>
+                <option value="2" selected>2 intervals · 4 half steps</option>
+                <option value="4">4 intervals · 8 half steps</option>
+              </select>
+            </div>
+
+            <div class="field" data-numeric-field="asian-pde" hidden>
+              <label for="pdeAverageGrid">PDE running-sum grid</label>
+              <input id="pdeAverageGrid" name="pdeAverageGrid" type="number" value="72" min="32" max="220" step="1">
+            </div>
+
+            <div class="field" data-numeric-field="pde" hidden>
+              <label for="pdeTimeSteps">PDE time steps</label>
+              <input id="pdeTimeSteps" name="pdeTimeSteps" type="number" value="220" min="80" max="1600" step="1">
+            </div>
+
+            <div class="field" data-numeric-field="american-pde" hidden>
+              <label for="pdeSorOmega">PSOR relaxation ω</label>
+              <input id="pdeSorOmega" name="pdeSorOmega" type="number" value="1.2" min="0.01" max="1.99" step="0.01">
+            </div>
+
+            <div class="field" data-numeric-field="american-pde" hidden>
+              <label for="pdeTolerance">LCP tolerance</label>
+              <input id="pdeTolerance" name="pdeTolerance" type="number" value="0.00000001" min="0.000000000001" step="any">
+            </div>
+
+            <div class="field" data-numeric-field="american-pde" hidden>
+              <label for="pdeMaxIterations">Maximum iterations / step</label>
+              <input id="pdeMaxIterations" name="pdeMaxIterations" type="number" value="10000" min="1" max="100000" step="1">
+            </div>
+
+            <div class="field" data-numeric-field="american-pde" hidden>
+              <label for="pdePenalty">Penalty coefficient</label>
+              <input id="pdePenalty" name="pdePenalty" type="number" value="1000000" min="1" step="any">
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <label class="checkbox" data-numeric-field="qmc" hidden>
+              <input id="randomizedQmc" name="randomizedQmc" type="checkbox">
+              Randomized Sobol digital shift
+            </label>
+            <div class="action-group">
+              <button id="benchmark-button" class="secondary-button" type="button">Payoff reductions</button>
+              <button id="vol-regression-button" class="secondary-button" type="button">Vol-limit regressions</button>
+              <button id="price-button" type="submit" disabled>Price product</button>
+            </div>
+          </div>
+          <p id="form-error" class="error" role="alert"></p>
+        </form>
+
+        <div>
+          <section id="result-panel" class="panel result-panel" hidden aria-live="polite">
+            <h2>Present value</h2>
+            <p id="price-output" class="price">-</p>
+            <p id="uncertainty-output" class="standard-error">-</p>
+            <dl class="result-list">
+              <div class="result-row"><dt>Product</dt><dd id="product-output">-</dd></div>
+              <div class="result-row"><dt>Language / method</dt><dd id="method-output">-</dd></div>
+              <div class="result-row"><dt>Volatility</dt><dd id="volatility-output">-</dd></div>
+              <div class="result-row"><dt>Underlying</dt><dd id="underlying-output">-</dd></div>
+              <div class="result-row"><dt>Workload</dt><dd id="workload-output">-</dd></div>
+              <div class="result-row"><dt>Runtime</dt><dd id="runtime-output">-</dd></div>
+              <div class="result-row"><dt>Payoff</dt><dd id="payoff-output">-</dd></div>
+            </dl>
+          </section>
+          <div class="panel result-panel result-placeholder">
+            <p>Your exotic pricing result will appear here.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="benchmark-panel" class="panel benchmark-panel" hidden aria-live="polite">
+        <div class="benchmark-heading">
+          <div>
+            <p class="eyebrow">Independent checks</p>
+            <h2 id="benchmark-title">Reduction &amp; benchmark suite</h2>
+          </div>
+          <p id="benchmark-description">Independent methods and limiting cases are compared numerically.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="benchmark-table">
+            <thead>
+              <tr><th>Test</th><th>Status</th><th>Reference</th><th>Candidate</th><th>Abs. error</th><th>Reduction</th></tr>
+            </thead>
+            <tbody id="benchmark-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

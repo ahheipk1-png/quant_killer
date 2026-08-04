@@ -1,0 +1,4 @@
+python-engine/__pycache__/
+rust-engine/target/
+csharp-engine/bin/
+csharp-engine/obj/
