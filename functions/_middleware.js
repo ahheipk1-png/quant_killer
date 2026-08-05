@@ -14,7 +14,10 @@ const PASSWORD = "admin";
 function unauthorized() {
   return new Response("Authentication required.", {
     status: 401,
-    headers: { "WWW-Authenticate": 'Basic realm="QuantKiller", charset="UTF-8"' },
+    headers: {
+      "WWW-Authenticate": 'Basic realm="QuantKiller", charset="UTF-8"',
+      "Cache-Control": "no-store",
+    },
   });
 }
 
@@ -39,5 +42,17 @@ export async function onRequest(context) {
     return unauthorized();
   }
 
-  return context.next();
+  // Force no-store on the authenticated response too. Without this,
+  // Cloudflare's static-asset edge cache can serve a previously-successful
+  // response to a *later, unauthenticated* request for the same URL --
+  // which is exactly what happened during testing: the gate worked on the
+  // first request, then silently stopped working on the cached repeat.
+  const response = await context.next();
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "no-store");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
