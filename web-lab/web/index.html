@@ -44,121 +44,129 @@
 
       <section class="workspace" aria-label="European option pricer">
         <form id="pricing-form" class="panel form-panel">
-          <div class="form-grid">
-            <div class="field engine-field">
-              <label for="engine">Pricing language</label>
-              <select id="engine" name="engine">
-                <option value="cpp">C++ · WebAssembly</option>
-                <option value="python">Python · Pyodide</option>
-                <option value="rust">Rust · WebAssembly</option>
-                <option value="csharp">C# · .NET WebAssembly</option>
-              </select>
-            </div>
+          <div class="field-section">
+            <p class="field-section-label">Contract &amp; market</p>
+            <div class="form-grid">
+              <div class="field">
+                <label for="option-type">Option type</label>
+                <select id="option-type" name="optionType">
+                  <option value="call">Call</option>
+                  <option value="put">Put</option>
+                </select>
+              </div>
 
-            <div class="field engine-field">
-              <label for="method">Pricing method</label>
-              <select id="method" name="method">
-                <option value="monte-carlo">Monte Carlo simulation</option>
-                <option value="closed-form">Black-Scholes closed form</option>
-                <option value="binomial">CRR binomial tree</option>
-              </select>
-            </div>
+              <div class="field">
+                <label for="exercise-style">Exercise style</label>
+                <select id="exercise-style" name="exerciseStyle">
+                  <option value="european">European</option>
+                  <option value="american">American</option>
+                </select>
+              </div>
 
-            <div class="field">
-              <label for="exercise-style">Exercise style</label>
-              <select id="exercise-style" name="exerciseStyle">
-                <option value="european">European</option>
-                <option value="american">American</option>
-              </select>
-            </div>
+              <div class="field">
+                <label for="spot">Spot price</label>
+                <input id="spot" name="spot" type="number" min="0.000001" step="any" value="100" required>
+              </div>
 
-            <div class="field">
-              <label for="option-type">Option type</label>
-              <select id="option-type" name="optionType">
-                <option value="call">Call</option>
-                <option value="put">Put</option>
-              </select>
-            </div>
+              <div class="field">
+                <label for="strike">Strike price</label>
+                <input id="strike" name="strike" type="number" min="0.000001" step="any" value="100" required>
+              </div>
 
-            <div class="field">
-              <label for="spot">Spot price</label>
-              <input id="spot" name="spot" type="number" min="0.000001" step="any" value="100" required>
-            </div>
+              <div class="field">
+                <label for="maturity">Time to maturity</label>
+                <div class="input-wrap">
+                  <input id="maturity" name="maturity" type="number" min="0.000001" step="any" value="1" required>
+                  <span class="suffix">years</span>
+                </div>
+              </div>
 
-            <div class="field">
-              <label for="strike">Strike price</label>
-              <input id="strike" name="strike" type="number" min="0.000001" step="any" value="100" required>
-            </div>
+              <div class="field">
+                <label for="rate">Risk-free rate</label>
+                <div class="input-wrap">
+                  <input id="rate" name="rate" type="number" step="any" value="5" required>
+                  <span class="suffix">%</span>
+                </div>
+              </div>
 
-            <div class="field">
-              <label for="maturity">Time to maturity</label>
-              <div class="input-wrap">
-                <input id="maturity" name="maturity" type="number" min="0.000001" step="any" value="1" required>
-                <span class="suffix">years</span>
+              <div class="field">
+                <label for="dividend-yield">Dividend yield</label>
+                <div class="input-wrap">
+                  <input id="dividend-yield" name="dividendYield" type="number" step="any" value="0" required>
+                  <span class="suffix">%</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="volatility">Volatility</label>
+                <div class="input-wrap">
+                  <input id="volatility" name="volatility" type="number" min="0" step="any" value="20" required>
+                  <span class="suffix">%</span>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div class="field">
-              <label for="rate">Risk-free rate</label>
-              <div class="input-wrap">
-                <input id="rate" name="rate" type="number" step="any" value="5" required>
-                <span class="suffix">%</span>
+          <div class="field-section">
+            <p class="field-section-label">Pricing engine &amp; method</p>
+            <div class="form-grid">
+              <div class="field engine-field">
+                <label for="engine">Pricing language</label>
+                <select id="engine" name="engine">
+                  <option value="cpp">C++ · WebAssembly</option>
+                  <option value="python">Python · Pyodide</option>
+                  <option value="rust">Rust · WebAssembly</option>
+                  <option value="csharp">C# · .NET WebAssembly</option>
+                </select>
               </div>
-            </div>
 
-            <div class="field">
-              <label for="dividend-yield">Dividend yield</label>
-              <div class="input-wrap">
-                <input id="dividend-yield" name="dividendYield" type="number" step="any" value="0" required>
-                <span class="suffix">%</span>
+              <div class="field engine-field">
+                <label for="method">Pricing method</label>
+                <select id="method" name="method">
+                  <option value="monte-carlo">Monte Carlo simulation</option>
+                  <option value="closed-form">Black-Scholes closed form</option>
+                  <option value="binomial">CRR binomial tree</option>
+                </select>
               </div>
-            </div>
 
-            <div class="field">
-              <label for="volatility">Volatility</label>
-              <div class="input-wrap">
-                <input id="volatility" name="volatility" type="number" min="0" step="any" value="20" required>
-                <span class="suffix">%</span>
+              <div class="field" data-method-only="monte-carlo" hidden>
+                <label for="paths">Monte Carlo paths</label>
+                <input id="paths" name="paths" type="number" min="2" max="2000000" step="1" value="100000" required>
               </div>
-            </div>
 
-            <div class="field" data-method-only="monte-carlo" hidden>
-              <label for="paths">Monte Carlo paths</label>
-              <input id="paths" name="paths" type="number" min="2" max="2000000" step="1" value="100000" required>
-            </div>
+              <div class="field" data-method-only="monte-carlo" hidden>
+                <label for="seed">Random seed</label>
+                <input id="seed" name="seed" type="number" min="0" max="4294967295" step="1" value="42" required>
+              </div>
 
-            <div class="field" data-method-only="monte-carlo" hidden>
-              <label for="seed">Random seed</label>
-              <input id="seed" name="seed" type="number" min="0" max="4294967295" step="1" value="42" required>
-            </div>
+              <div class="field" data-method-only="monte-carlo" hidden>
+                <label for="sampling">Sampling sequence</label>
+                <select id="sampling" name="sampling">
+                  <option value="pcg">Pseudo-random · PCG32</option>
+                  <option value="sobol">QMC · Sobol</option>
+                  <option value="rqmc">Randomized QMC · Sobol (8 shifts)</option>
+                </select>
+              </div>
 
-            <div class="field" data-method-only="monte-carlo" hidden>
-              <label for="sampling">Sampling sequence</label>
-              <select id="sampling" name="sampling">
-                <option value="pcg">Pseudo-random · PCG32</option>
-                <option value="sobol">QMC · Sobol</option>
-                <option value="rqmc">Randomized QMC · Sobol (8 shifts)</option>
-              </select>
-            </div>
+              <div class="field" data-method-only="monte-carlo" hidden>
+                <label for="variance-reduction">Variance control</label>
+                <select id="variance-reduction" name="varianceReduction">
+                  <option value="none">None</option>
+                  <option value="antithetic" selected>Antithetic variates</option>
+                  <option value="control">Discounted-stock control variate</option>
+                  <option value="antithetic-control">Antithetic + control variate</option>
+                </select>
+              </div>
 
-            <div class="field" data-method-only="monte-carlo" hidden>
-              <label for="variance-reduction">Variance control</label>
-              <select id="variance-reduction" name="varianceReduction">
-                <option value="none">None</option>
-                <option value="antithetic" selected>Antithetic variates</option>
-                <option value="control">Discounted-stock control variate</option>
-                <option value="antithetic-control">Antithetic + control variate</option>
-              </select>
-            </div>
+              <div class="field" data-method-only="binomial" hidden>
+                <label for="steps">Binomial steps</label>
+                <input id="steps" name="steps" type="number" min="1" max="2000" step="1" value="500" required disabled>
+              </div>
 
-            <div class="field" data-method-only="binomial" hidden>
-              <label for="steps">Binomial steps</label>
-              <input id="steps" name="steps" type="number" min="1" max="2000" step="1" value="500" required disabled>
-            </div>
-
-            <div class="field" data-method-only="carr-randomization" hidden>
-              <label for="carr-phases">Carr Erlang phases</label>
-              <input id="carr-phases" name="carrPhases" type="number" min="4" max="256" step="1" value="32" required disabled>
+              <div class="field" data-method-only="carr-randomization" hidden>
+                <label for="carr-phases">Carr Erlang phases</label>
+                <input id="carr-phases" name="carrPhases" type="number" min="4" max="256" step="1" value="32" required disabled>
+              </div>
             </div>
           </div>
 
