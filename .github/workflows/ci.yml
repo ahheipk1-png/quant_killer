@@ -91,12 +91,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Regenerate code-snapshot.json
+        run: python scripts/gen_code_snapshot.py
       - name: Run all Node test suites
         working-directory: web-lab
         run: |
           for t in smoke-test.cjs exotic-test.cjs advanced-test.cjs pde-test.cjs \
                    path-distribution-test.cjs pricing-regression-test.cjs \
-                   portfolio-test.cjs volatility-test.cjs; do
+                   portfolio-test.cjs volatility-test.cjs code-viewer-test.cjs; do
             echo "=== $t ==="
             node "$t"
           done

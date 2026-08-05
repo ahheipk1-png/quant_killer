@@ -45,7 +45,7 @@ Run-Suite "crosslang" "scripts/test_crosslang.py" "python" {
 Run-Suite "web-lab" "web-lab/smoke-test.cjs" "node"   {
     foreach ($t in "smoke-test.cjs","exotic-test.cjs","advanced-test.cjs","pde-test.cjs",
                    "path-distribution-test.cjs","pricing-regression-test.cjs",
-                   "portfolio-test.cjs","volatility-test.cjs") {
+                   "portfolio-test.cjs","volatility-test.cjs","code-viewer-test.cjs") {
         node $t | Out-Host
         if ($LASTEXITCODE -ne 0) { throw "web-lab $t failed" }
     }
