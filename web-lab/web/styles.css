@@ -64,6 +64,60 @@ h1 {
   line-height: 1.65;
 }
 
+.lab-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 22px;
+  margin-top: 28px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-group-label {
+  margin-right: 2px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.lab-nav a {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 7px 14px;
+  font-size: 0.83rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.lab-nav a:hover {
+  border-color: var(--muted);
+  color: var(--text);
+}
+
+.lab-nav a[aria-current="page"] {
+  border-color: var(--accent);
+  background: rgba(94, 225, 194, 0.12);
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .lab-nav {
+    gap: 16px;
+  }
+}
+
 .engine-line {
   display: flex;
   align-items: center;

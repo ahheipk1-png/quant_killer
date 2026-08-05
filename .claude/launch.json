@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-lab",
+      "runtimeExecutable": "C:\\Program64\\Anaconda\\python.exe",
+      "runtimeArgs": ["web-lab/serve.py", "--directory", "web-lab/web"],
+      "port": 8000,
+      "autoPort": true
+    }
+  ]
+}

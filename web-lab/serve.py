@@ -1,5 +1,6 @@
 import argparse
 import mimetypes
+import os
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -7,7 +8,7 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="Serve QuantKiller browser assets locally.")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
     parser.add_argument("--directory", type=Path, required=True)
     args = parser.parse_args()
 
