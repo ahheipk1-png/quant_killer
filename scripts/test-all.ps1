@@ -39,6 +39,9 @@ Run-Suite "cpp"    "cpp/CMakeLists.txt"    "cmake"  {
 }
 Run-Suite "rust"   "rust/Cargo.toml"        "cargo"  { cargo test --workspace --quiet }
 Run-Suite "csharp" "csharp/QuantKiller.slnx" "dotnet" { dotnet test --nologo -v q }
+Run-Suite "crosslang" "scripts/test_crosslang.py" "python" {
+    python (Join-Path $root "scripts/test_crosslang.py")
+}
 Run-Suite "web-lab" "web-lab/smoke-test.cjs" "node"   {
     foreach ($t in "smoke-test.cjs","exotic-test.cjs","advanced-test.cjs","pde-test.cjs",
                    "path-distribution-test.cjs","pricing-regression-test.cjs",

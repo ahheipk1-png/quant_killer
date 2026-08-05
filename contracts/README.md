@@ -18,6 +18,13 @@ Everything that must be **identical across all four languages** (Python, C++, C#
    `python/tests/`, `csharp/tests/QuantKiller.Tests/VectorTests.cs`, `rust/quantkiller/tests/vectors.rs`,
    `cpp/tests/vector_tests.cpp` — all four pass the same 41 cases across 11 vector files as of
    the American-methods merge.
+3. `scripts/test_crosslang.py` goes one step further: it runs the *live CLI binary* of every
+   language that's currently built (not the in-process library) on every vector case, and diffs
+   every pair of engines' JSON output within tolerance. This is the strongest proof in the repo
+   — it exercises real process invocation and JSON encode/decode, catching bugs the per-language
+   vector tests structurally can't (e.g. a CLI argument-parsing or serialization bug that a
+   direct function call would never hit). Run it after building at least two languages'
+   CLIs.
 3. Expected values are compared as
    `|actual − expected| ≤ abs_tol + rel_tol · |expected|`,
    with tolerances declared *inside each vector file*. Typical values:
