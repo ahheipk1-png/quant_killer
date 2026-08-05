@@ -133,6 +133,15 @@ function setBusy(isBusy) {
     : `Calculate with ${engine.label}`;
 }
 
+// Maps the "Pricing method" dropdown to the matching model group on the
+// Source code page, so the "Verify this model" link always points at the
+// code for whatever's actually selected, not a fixed default.
+const SOURCE_MODEL_BY_METHOD = {
+  "closed-form": "black_scholes",
+  binomial: "binomial",
+  "monte-carlo": "monte_carlo",
+};
+
 function updateMethodFields() {
   const method = methodSelect.value;
   document.querySelectorAll("[data-method-only]").forEach((element) => {
@@ -146,6 +155,12 @@ function updateMethodFields() {
   distributionPanel.hidden = true;
   latestDistribution = undefined;
   errorElement.textContent = "";
+
+  const sourceLink = document.querySelector("#verify-source-link");
+  if (sourceLink) {
+    const model = SOURCE_MODEL_BY_METHOD[method] ?? "black_scholes";
+    sourceLink.href = `code.html?model=${model}`;
+  }
 }
 
 function updateMethodOptions() {

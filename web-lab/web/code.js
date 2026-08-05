@@ -86,7 +86,12 @@
       modelListEl.appendChild(item);
     }
 
-    selectGroup(groups[0].id);
+    // Deep-link support: /code.html?model=black_scholes jumps straight to
+    // that model, so other lab pages can link directly to their own source
+    // instead of dropping the visitor on an unrelated default.
+    const requested = new URLSearchParams(location.search).get("model");
+    const initial = groups.find((g) => g.id === requested) ?? groups[0];
+    selectGroup(initial.id);
   }
 
   copyButton.addEventListener("click", async () => {

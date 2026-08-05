@@ -300,6 +300,35 @@ button:disabled {
   font-size: 0.88rem;
 }
 
+.verify-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+}
+
+.verify-links-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.verify-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.verify-links a:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
 .result-panel {
   min-height: 100%;
   padding: 26px;
