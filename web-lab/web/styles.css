@@ -38,6 +38,13 @@ select {
   padding: 48px 0 64px;
 }
 
+.site-logo {
+  display: block;
+  width: 168px;
+  height: auto;
+  margin: 0 0 18px;
+}
+
 .eyebrow {
   margin: 0 0 12px;
   color: var(--accent);
