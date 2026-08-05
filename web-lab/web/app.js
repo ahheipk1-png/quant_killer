@@ -7,6 +7,9 @@ const statusElement = document.querySelector("#engine-status");
 const errorElement = document.querySelector("#form-error");
 const resultPanel = document.querySelector("#result-panel");
 const distributionPanel = document.querySelector("#distribution-panel");
+const historyList = document.querySelector("#history-list");
+const historyEmpty = document.querySelector("#history-empty");
+const historyClearButton = document.querySelector("#history-clear");
 
 const priceOutput = document.querySelector("#price-output");
 const errorOutput = document.querySelector("#error-output");
@@ -37,6 +40,8 @@ let engineLoadStartedAt = 0;
 let pendingInputs;
 let latestDistribution;
 let resizeFrame;
+let historyIdCounter = 0;
+const historyEntries = [];
 
 const engines = {
   cpp: {
@@ -322,6 +327,210 @@ function renderDistribution() {
   drawPayoffFunction(latestDistribution.inputs, latestDistribution.terminalPrices);
 }
 
+// --- Pricing history: compare runs side by side -------------------------
+//
+// Every successful price becomes a compact card. Hover shows the full
+// input set via a tooltip, "Duplicate" copies those inputs back into the
+// form so a variation can be priced and compared, and double-click opens
+// a full-detail view in a new window (built as a Blob + object URL, so it
+// needs no server -- consistent with the rest of this project).
+
+function inputSummaryRows(entry) {
+  const { inputs, engineKey, result } = entry;
+  const rows = [
+    ["Engine", engines[engineKey].label],
+    ["Method", methods[inputs.method].label],
+    ["Exercise", inputs.exerciseStyle === "american" ? "American" : "European"],
+    ["Type", inputs.optionType === "call" ? "Call" : "Put"],
+    ["Spot", formatNumber(inputs.spot, 2)],
+    ["Strike", formatNumber(inputs.strike, 2)],
+    ["Maturity", `${formatNumber(inputs.maturity, 4)} yr`],
+    ["Rate", `${formatNumber(inputs.rate * 100, 2)}%`],
+    ["Dividend yield", `${formatNumber(inputs.dividendYield * 100, 2)}%`],
+    ["Volatility", `${formatNumber(inputs.volatility * 100, 2)}%`],
+  ];
+  if (inputs.method === "monte-carlo") {
+    rows.push(
+      ["Paths", new Intl.NumberFormat("en-US").format(inputs.paths)],
+      ["Seed", String(inputs.seed)],
+      ["Sampling", samplingLabels[inputs.sampling]],
+      ["Variance control", varianceLabels[inputs.varianceReduction]],
+    );
+  } else if (inputs.method === "binomial") {
+    rows.push(["Steps", new Intl.NumberFormat("en-US").format(inputs.steps)]);
+  } else if (inputs.method === "carr-randomization") {
+    rows.push(["Erlang phases", new Intl.NumberFormat("en-US").format(inputs.carrPhases)]);
+  }
+  rows.push(["Price", formatNumber(result.price)]);
+  if (inputs.method === "monte-carlo") {
+    rows.push(
+      ["Std. error", formatNumber(result.standardError)],
+      ["Std. deviation", formatNumber(result.standardDeviation)],
+    );
+  }
+  rows.push(["Runtime", `${result.elapsedMs.toFixed(1)} ms`]);
+  return rows;
+}
+
+function buildTooltip(entry) {
+  const tooltip = document.createElement("div");
+  tooltip.className = "chip-tooltip";
+  const dl = document.createElement("dl");
+  for (const [label, value] of inputSummaryRows(entry)) {
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    dl.append(dt, dd);
+  }
+  const hint = document.createElement("p");
+  hint.className = "tooltip-hint";
+  hint.textContent = "Double-click for full detail";
+  tooltip.append(dl, hint);
+  return tooltip;
+}
+
+function updateHistoryEmptyState() {
+  historyEmpty.hidden = historyEntries.length > 0;
+  historyClearButton.hidden = historyEntries.length === 0;
+}
+
+function removeHistoryEntry(id) {
+  const index = historyEntries.findIndex((entry) => entry.id === id);
+  if (index === -1) return;
+  historyEntries.splice(index, 1);
+  const chip = historyList.querySelector(`[data-history-id="${id}"]`);
+  chip?.remove();
+  updateHistoryEmptyState();
+}
+
+function duplicateHistoryEntry(entry) {
+  const { inputs, engineKey } = entry;
+  if (engineSelect.value !== engineKey) {
+    engineSelect.value = engineKey;
+    selectEngine();
+  }
+  exerciseSelect.value = inputs.exerciseStyle;
+  updateMethodOptions();
+  methodSelect.value = inputs.method;
+  updateMethodFields();
+  form.elements.optionType.value = inputs.optionType;
+  form.elements.spot.value = inputs.spot;
+  form.elements.strike.value = inputs.strike;
+  form.elements.maturity.value = inputs.maturity;
+  form.elements.rate.value = inputs.rate * 100;
+  form.elements.dividendYield.value = inputs.dividendYield * 100;
+  form.elements.volatility.value = inputs.volatility * 100;
+  if (inputs.method === "monte-carlo") {
+    form.elements.paths.value = inputs.paths;
+    form.elements.seed.value = inputs.seed;
+    form.elements.sampling.value = inputs.sampling;
+    form.elements.varianceReduction.value = inputs.varianceReduction;
+    form.elements.showDistribution.checked = inputs.includeDistribution;
+  } else if (inputs.method === "binomial") {
+    form.elements.steps.value = inputs.steps;
+  } else if (inputs.method === "carr-randomization") {
+    form.elements.carrPhases.value = inputs.carrPhases;
+  }
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openHistoryDetail(entry) {
+  const rows = inputSummaryRows(entry)
+    .map(([label, value]) => `<tr><th>${label}</th><td>${value}</td></tr>`)
+    .join("");
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QuantKiller - Pricing run detail</title>
+<style>
+  body { margin: 0; padding: 40px; background: #07111f; color: #f4f8fc;
+         font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  p.meta { color: #9db0c5; margin: 0 0 28px; font-size: 0.86rem; }
+  table { border-collapse: collapse; width: 100%; max-width: 520px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #29425e; font-size: 0.92rem; }
+  th { color: #9db0c5; font-weight: 600; width: 45%; }
+  td { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+  <h1>Pricing run detail</h1>
+  <p class="meta">Priced ${new Date(entry.timestamp).toLocaleString()}</p>
+  <table>${rows}</table>
+</body>
+</html>`;
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank");
+  if (win) {
+    win.addEventListener("unload", () => URL.revokeObjectURL(url), { once: true });
+  }
+}
+
+function renderHistoryChip(entry) {
+  const chip = document.createElement("div");
+  chip.className = "history-chip";
+  chip.dataset.historyId = String(entry.id);
+  chip.setAttribute("role", "listitem");
+  chip.tabIndex = 0;
+
+  const duplicateButton = document.createElement("button");
+  duplicateButton.type = "button";
+  duplicateButton.className = "chip-duplicate";
+  duplicateButton.title = "Duplicate into form";
+  duplicateButton.setAttribute("aria-label", "Duplicate this run into the form");
+  duplicateButton.textContent = "⧉";
+  duplicateButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    duplicateHistoryEntry(entry);
+  });
+
+  const priceLabel = document.createElement("span");
+  priceLabel.className = "chip-price";
+  priceLabel.textContent = formatNumber(entry.result.price, 4);
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "chip-close";
+  closeButton.title = "Remove";
+  closeButton.setAttribute("aria-label", "Remove this run from history");
+  closeButton.textContent = "×";
+  closeButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    removeHistoryEntry(entry.id);
+  });
+
+  chip.addEventListener("dblclick", () => openHistoryDetail(entry));
+  chip.append(duplicateButton, priceLabel, closeButton, buildTooltip(entry));
+  return chip;
+}
+
+function addHistoryEntry(inputs, engineKey, result) {
+  const entry = {
+    id: (historyIdCounter += 1),
+    inputs,
+    engineKey,
+    result: {
+      price: result.price,
+      standardError: result.standardError,
+      standardDeviation: result.standardDeviation,
+      elapsedMs: result.elapsedMs,
+    },
+    timestamp: Date.now(),
+  };
+  historyEntries.push(entry);
+  historyList.appendChild(renderHistoryChip(entry));
+  updateHistoryEmptyState();
+}
+
+historyClearButton.addEventListener("click", () => {
+  historyEntries.length = 0;
+  historyList.replaceChildren();
+  updateHistoryEmptyState();
+});
+
 function handleWorkerMessage(event) {
   const message = event.data;
 
@@ -409,6 +618,7 @@ function handleWorkerMessage(event) {
   methodOutput.textContent = methods[inputs.method].label;
   exerciseOutput.textContent = inputs.exerciseStyle === "american" ? "American" : "European";
   resultPanel.hidden = false;
+  addHistoryEntry(inputs, engineSelect.value, message);
 
   if (isMonteCarlo && inputs.includeDistribution && message.distribution) {
     latestDistribution = { ...message.distribution, inputs };
