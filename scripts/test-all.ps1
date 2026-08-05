@@ -37,9 +37,16 @@ Run-Suite "cpp"    "cpp/CMakeLists.txt"    "cmake"  {
     cmake --build build --config Release | Out-Host
     ctest --test-dir build -C Release --output-on-failure
 }
-Run-Suite "rust"   "rust/Cargo.toml"       "cargo"  { cargo test --quiet }
-Run-Suite "csharp" "csharp/QuantKiller.sln" "dotnet" { dotnet test --nologo -v q }
-Run-Suite "java"   "java/pom.xml"          "mvn"    { mvn -q -B test }
+Run-Suite "rust"   "rust/Cargo.toml"        "cargo"  { cargo test --workspace --quiet }
+Run-Suite "csharp" "csharp/QuantKiller.slnx" "dotnet" { dotnet test --nologo -v q }
+Run-Suite "web-lab" "web-lab/smoke-test.cjs" "node"   {
+    foreach ($t in "smoke-test.cjs","exotic-test.cjs","advanced-test.cjs","pde-test.cjs",
+                   "path-distribution-test.cjs","pricing-regression-test.cjs",
+                   "portfolio-test.cjs","volatility-test.cjs") {
+        node $t | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "web-lab $t failed" }
+    }
+}
 
 Write-Host ""
 Write-Host "=== Summary ===" -ForegroundColor Cyan

@@ -2,9 +2,9 @@
 
 This file defines the random-number generator and the special functions that **every language
 implements identically**. Same seed ⇒ same random paths ⇒ Monte Carlo prices that agree across
-Python, C++, C#, Java, and Rust to ~1e-12 (vector tolerance 1e-9).
+Python, C++, C#, and Rust to ~1e-12 (vector tolerance 1e-9).
 
-Do **not** change anything here without regenerating every vector and updating all five
+Do **not** change anything here without regenerating every vector and updating all four
 implementations in the same commit.
 
 Reference outputs for everything below live in `vectors/rng.json` and
@@ -36,9 +36,8 @@ next_u32():                         # returns unsigned 32-bit
     return rotate_right_32(xorshifted, rot)
 ```
 
-All shifts are **logical** (unsigned). Languages without native u64 (Java) use two's-complement
-`long` — wrapping `*` and `+` are bit-identical; use `>>>` for shifts and
-`Integer.rotateRight`.
+All shifts are **logical** (unsigned). In Rust, `u64` wrapping arithmetic needs
+`wrapping_mul`/`wrapping_add` explicitly (plain `*`/`+` panic on overflow in debug builds).
 
 A model that needs randomness takes a `seed` parameter and uses `seed(seed, 1)`.
 

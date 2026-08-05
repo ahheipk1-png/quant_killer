@@ -20,14 +20,94 @@ jobs:
             [ -f "$f" ] || { echo "MISSING: $f"; exit 1; }
           done
           echo "All required files present."
-      - name: Schemas are valid JSON
+      - name: Schemas and vectors are valid JSON
         run: |
           python3 -c "import json,glob; [json.load(open(p)) for p in glob.glob('contracts/schema/*.json')+glob.glob('contracts/vectors/*.json')]; print('JSON OK')"
 
-  # Language jobs are appended as each implementation lands (see CLAUDE.md phases):
-  #   python  -> pytest against contracts/vectors
-  #   cpp     -> cmake + ctest
-  #   rust    -> cargo test
-  #   csharp  -> dotnet test
-  #   java    -> mvn test
-  #   crosslang -> run every CLI on the same request, diff outputs
+  python:
+    name: Python
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - run: python -m pytest -q
+        working-directory: python
+
+  csharp:
+    name: C#
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet test
+        working-directory: csharp
+
+  rust:
+    name: Rust
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --workspace
+        working-directory: rust
+
+  cpp:
+    name: C++
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        working-directory: cpp
+      - name: Build
+        run: cmake --build build --config Release
+        working-directory: cpp
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+        working-directory: cpp
+
+  web-lab:
+    name: Browser lab (Node suites)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run all Node test suites
+        working-directory: web-lab
+        run: |
+          for t in smoke-test.cjs exotic-test.cjs advanced-test.cjs pde-test.cjs \
+                   path-distribution-test.cjs pricing-regression-test.cjs \
+                   portfolio-test.cjs volatility-test.cjs; do
+            echo "=== $t ==="
+            node "$t"
+          done
+
+  # Runs after every language is green: diff each CLI's output on the same
+  # request to prove cross-language agreement beyond the vector-file checks
+  # each language's own test suite already does.
+  crosslang:
+    name: Cross-language CLI parity
+    runs-on: ubuntu-latest
+    needs: [python, csharp, rust, cpp]
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "TODO -- Phase 3 (interop): build every CLI and diff outputs on shared requests"
