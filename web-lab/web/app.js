@@ -1,47 +1,4 @@
-const form = document.querySelector("#pricing-form");
-const engineSelect = document.querySelector("#engine");
-const methodSelect = document.querySelector("#method");
-const exerciseSelect = document.querySelector("#exercise-style");
-const priceButton = document.querySelector("#price-button");
-const statusElement = document.querySelector("#engine-status");
-const errorElement = document.querySelector("#form-error");
-const resultPanel = document.querySelector("#result-panel");
-const distributionPanel = document.querySelector("#distribution-panel");
-const historyList = document.querySelector("#history-list");
-const historyEmpty = document.querySelector("#history-empty");
-const historyClearButton = document.querySelector("#history-clear");
-
-const priceOutput = document.querySelector("#price-output");
-const errorOutput = document.querySelector("#error-output");
-const intervalOutput = document.querySelector("#interval-output");
-const intervalRow = document.querySelector("#interval-row");
-const stdOutput = document.querySelector("#std-output");
-const stdRow = document.querySelector("#std-row");
-const samplingOutput = document.querySelector("#sampling-output");
-const samplingRow = document.querySelector("#sampling-row");
-const varianceOutput = document.querySelector("#variance-output");
-const varianceRow = document.querySelector("#variance-row");
-const runtimeOutput = document.querySelector("#runtime-output");
-const workloadOutput = document.querySelector("#workload-output");
-const engineOutput = document.querySelector("#engine-output");
-const methodOutput = document.querySelector("#method-output");
-const exerciseOutput = document.querySelector("#exercise-output");
-const payoffOutput = document.querySelector("#payoff-output");
-const payoffChartTitle = document.querySelector("#payoff-chart-title");
-const terminalChart = document.querySelector("#terminal-chart");
-const payoffChart = document.querySelector("#payoff-chart");
-const payoffFunctionChart = document.querySelector("#payoff-function-chart");
-
-let requestId = 0;
-let engineReady = false;
-let worker;
-let engineLoadTimer;
-let engineLoadStartedAt = 0;
-let pendingInputs;
-let latestDistribution;
-let resizeFrame;
-let historyIdCounter = 0;
-const historyEntries = [];
+// ===================== Shared engine/method metadata =====================
 
 const engines = {
   cpp: {
@@ -114,14 +71,16 @@ const varianceLabels = {
   "antithetic-control": "Antithetic + control variate",
 };
 
-function setEngineStatus(label, state) {
-  statusElement.textContent = label;
-  statusElement.dataset.state = state;
-}
+// Maps the "Pricing method" dropdown to the matching model group on the
+// Source code page, so each panel's "Verify this model" link always points
+// at the code for whatever's actually selected, not a fixed default.
+const SOURCE_MODEL_BY_METHOD = {
+  "closed-form": "black_scholes",
+  binomial: "binomial",
+  "monte-carlo": "monte_carlo",
+};
 
-function readNumber(name) {
-  return Number(form.elements[name].value);
-}
+// ===================== Shared generic helpers =====================
 
 function formatNumber(value, digits = 6) {
   return new Intl.NumberFormat("en-US", {
@@ -130,73 +89,8 @@ function formatNumber(value, digits = 6) {
   }).format(value);
 }
 
-function setBusy(isBusy) {
-  const engine = engines[engineSelect.value];
-  priceButton.disabled = isBusy || !engineReady;
-  priceButton.textContent = isBusy
-    ? `Calculating with ${engine.label}...`
-    : `Calculate with ${engine.label}`;
-}
-
-// Maps the "Pricing method" dropdown to the matching model group on the
-// Source code page, so the "Verify this model" link always points at the
-// code for whatever's actually selected, not a fixed default.
-const SOURCE_MODEL_BY_METHOD = {
-  "closed-form": "black_scholes",
-  binomial: "binomial",
-  "monte-carlo": "monte_carlo",
-};
-
-function updateMethodFields() {
-  const method = methodSelect.value;
-  document.querySelectorAll("[data-method-only]").forEach((element) => {
-    const visible = element.dataset.methodOnly === method;
-    element.hidden = !visible;
-    element.querySelectorAll("input, select").forEach((control) => {
-      control.disabled = !visible;
-    });
-  });
-  resultPanel.hidden = true;
-  distributionPanel.hidden = true;
-  latestDistribution = undefined;
-  errorElement.textContent = "";
-
-  const sourceLink = document.querySelector("#verify-source-link");
-  if (sourceLink) {
-    const model = SOURCE_MODEL_BY_METHOD[method] ?? "black_scholes";
-    sourceLink.href = `code.html?model=${model}`;
-  }
-}
-
-function updateMethodOptions() {
-  const previousMethod = methodSelect.value;
-  const options = methodOptions[exerciseSelect.value];
-  methodSelect.replaceChildren(...options.map(([value, label]) =>
-    new Option(label, value)));
-  if (options.some(([value]) => value === previousMethod)) {
-    methodSelect.value = previousMethod;
-  }
-  updateMethodFields();
-}
-
-function clearEngineLoadTimer() {
-  if (engineLoadTimer) {
-    window.clearTimeout(engineLoadTimer);
-    engineLoadTimer = undefined;
-  }
-}
-
-function showEngineLoadFailure(message) {
-  clearEngineLoadTimer();
-  engineReady = false;
-  if (worker) {
-    worker.terminate();
-    worker = undefined;
-  }
-  errorElement.textContent = message;
-  setEngineStatus("Engine load failed", "error");
-  priceButton.disabled = false;
-  priceButton.textContent = `Retry ${engines[engineSelect.value].label} engine`;
+function readNumber(form, name) {
+  return Number(form.elements[name].value);
 }
 
 function prepareCanvas(canvas) {
@@ -268,8 +162,8 @@ function drawHistogram(canvas, rawValues, color) {
   context.fillText(String(maxCount), padding.left - 5, padding.top + 9);
 }
 
-function drawPayoffFunction(inputs, terminalPrices) {
-  const { context, width, height } = prepareCanvas(payoffFunctionChart);
+function drawPayoffFunction(canvas, inputs, terminalPrices) {
+  const { context, width, height } = prepareCanvas(canvas);
   const padding = { left: 38, right: 10, top: 14, bottom: 28 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
@@ -320,20 +214,24 @@ function drawPayoffFunction(inputs, terminalPrices) {
   context.fillText("K", strikeX, padding.top + 11);
 }
 
-function renderDistribution() {
-  if (!latestDistribution || distributionPanel.hidden) return;
-  drawHistogram(terminalChart, latestDistribution.terminalPrices, "#5ee1c2");
-  drawHistogram(payoffChart, latestDistribution.payoffs, "#ffd166");
-  drawPayoffFunction(latestDistribution.inputs, latestDistribution.terminalPrices);
-}
-
-// --- Pricing history: compare runs side by side -------------------------
+// ===================== Shared: pricing history =====================
 //
-// Every successful price becomes a compact card. Hover shows the full
-// input set via a tooltip, "Duplicate" copies those inputs back into the
-// form so a variation can be priced and compared, and double-click opens
-// a full-detail view in a new window (built as a Blob + object URL, so it
-// needs no server -- consistent with the rest of this project).
+// One history strip, fed by every panel. Every successful price becomes a
+// compact card: hover shows the full input set via a tooltip, "Duplicate"
+// copies those inputs into panel 1 (the primary panel -- dragging a module
+// between panels is the tool for getting values into panel 2, see below),
+// and double-click opens a full-detail view in a new window (Blob + object
+// URL, no server involved).
+
+const historyList = document.querySelector("#history-list");
+const historyEmpty = document.querySelector("#history-empty");
+const historyClearButton = document.querySelector("#history-clear");
+let historyIdCounter = 0;
+const historyEntries = [];
+
+// Populated as each panel initializes; keyed by its id suffix ("" for the
+// primary panel, "-2" for the comparison panel).
+const panels = {};
 
 function inputSummaryRows(entry) {
   const { inputs, engineKey, result } = entry;
@@ -405,34 +303,9 @@ function removeHistoryEntry(id) {
 }
 
 function duplicateHistoryEntry(entry) {
-  const { inputs, engineKey } = entry;
-  if (engineSelect.value !== engineKey) {
-    engineSelect.value = engineKey;
-    selectEngine();
-  }
-  exerciseSelect.value = inputs.exerciseStyle;
-  updateMethodOptions();
-  methodSelect.value = inputs.method;
-  updateMethodFields();
-  form.elements.optionType.value = inputs.optionType;
-  form.elements.spot.value = inputs.spot;
-  form.elements.strike.value = inputs.strike;
-  form.elements.maturity.value = inputs.maturity;
-  form.elements.rate.value = inputs.rate * 100;
-  form.elements.dividendYield.value = inputs.dividendYield * 100;
-  form.elements.volatility.value = inputs.volatility * 100;
-  if (inputs.method === "monte-carlo") {
-    form.elements.paths.value = inputs.paths;
-    form.elements.seed.value = inputs.seed;
-    form.elements.sampling.value = inputs.sampling;
-    form.elements.varianceReduction.value = inputs.varianceReduction;
-    form.elements.showDistribution.checked = inputs.includeDistribution;
-  } else if (inputs.method === "binomial") {
-    form.elements.steps.value = inputs.steps;
-  } else if (inputs.method === "carr-randomization") {
-    form.elements.carrPhases.value = inputs.carrPhases;
-  }
-  form.scrollIntoView({ behavior: "smooth", block: "start" });
+  const primary = panels[""];
+  if (!primary) return;
+  primary.applyEntry(entry);
 }
 
 function openHistoryDetail(entry) {
@@ -531,229 +404,490 @@ historyClearButton.addEventListener("click", () => {
   updateHistoryEmptyState();
 });
 
-function handleWorkerMessage(event) {
-  const message = event.data;
+// ===================== Panel factory =====================
+//
+// Everything about one instrument -- its form, its engine worker, its
+// result panel -- lives in one closure so a second, fully independent
+// panel is just a second call to this function against a second set of
+// (id-suffixed) DOM elements. Panels don't share a worker: picking the
+// same engine in both loads it twice, which is simpler and safer than
+// routing shared-worker responses to the right panel, at the cost of a
+// second WASM/Pyodide load (typically served from cache after the first).
 
-  if (message.type === "ready") {
+function initPricingPanel(suffix, { hasDistribution = false } = {}) {
+  const q = (selector) => document.querySelector(`${selector}${suffix}`);
+
+  const form = q("#pricing-form");
+  const engineSelect = q("#engine");
+  const methodSelect = q("#method");
+  const exerciseSelect = q("#exercise-style");
+  const priceButton = q("#price-button");
+  const statusElement = q("#engine-status");
+  const errorElement = q("#form-error");
+  const resultPanel = q("#result-panel");
+  const distributionPanel = hasDistribution ? q("#distribution-panel") : null;
+  const sourceLink = q("#verify-source-link");
+
+  const priceOutput = q("#price-output");
+  const errorOutput = q("#error-output");
+  const intervalOutput = q("#interval-output");
+  const intervalRow = q("#interval-row");
+  const stdOutput = q("#std-output");
+  const stdRow = q("#std-row");
+  const samplingOutput = q("#sampling-output");
+  const samplingRow = q("#sampling-row");
+  const varianceOutput = q("#variance-output");
+  const varianceRow = q("#variance-row");
+  const runtimeOutput = q("#runtime-output");
+  const workloadOutput = q("#workload-output");
+  const engineOutput = q("#engine-output");
+  const methodOutput = q("#method-output");
+  const exerciseOutput = q("#exercise-output");
+  const payoffOutput = q("#payoff-output");
+  const payoffChartTitle = hasDistribution ? q("#payoff-chart-title") : null;
+  const terminalChart = hasDistribution ? q("#terminal-chart") : null;
+  const payoffChart = hasDistribution ? q("#payoff-chart") : null;
+  const payoffFunctionChart = hasDistribution ? q("#payoff-function-chart") : null;
+
+  let requestId = 0;
+  let engineReady = false;
+  let worker;
+  let engineLoadTimer;
+  let engineLoadStartedAt = 0;
+  let pendingInputs;
+  let latestDistribution;
+  let resizeFrame;
+
+  function setEngineStatus(label, state) {
+    statusElement.textContent = label;
+    statusElement.dataset.state = state;
+  }
+
+  function setBusy(isBusy) {
+    const engine = engines[engineSelect.value];
+    priceButton.disabled = isBusy || !engineReady;
+    priceButton.textContent = isBusy
+      ? `Calculating with ${engine.label}...`
+      : `Calculate with ${engine.label}`;
+  }
+
+  function updateMethodFields() {
+    const method = methodSelect.value;
+    form.querySelectorAll("[data-method-only]").forEach((element) => {
+      const visible = element.dataset.methodOnly === method;
+      element.hidden = !visible;
+      element.querySelectorAll("input, select").forEach((control) => {
+        control.disabled = !visible;
+      });
+    });
+    resultPanel.hidden = true;
+    if (hasDistribution) {
+      distributionPanel.hidden = true;
+      latestDistribution = undefined;
+    }
+    errorElement.textContent = "";
+
+    if (sourceLink) {
+      const model = SOURCE_MODEL_BY_METHOD[method] ?? "black_scholes";
+      sourceLink.href = `code.html?model=${model}`;
+    }
+  }
+
+  function updateMethodOptions() {
+    const previousMethod = methodSelect.value;
+    const options = methodOptions[exerciseSelect.value];
+    methodSelect.replaceChildren(...options.map(([value, label]) =>
+      new Option(label, value)));
+    if (options.some(([value]) => value === previousMethod)) {
+      methodSelect.value = previousMethod;
+    }
+    updateMethodFields();
+  }
+
+  function clearEngineLoadTimer() {
+    if (engineLoadTimer) {
+      window.clearTimeout(engineLoadTimer);
+      engineLoadTimer = undefined;
+    }
+  }
+
+  function showEngineLoadFailure(message) {
     clearEngineLoadTimer();
-    engineReady = true;
-    setBusy(false);
-    const loadMs = performance.now() - engineLoadStartedAt;
-    setEngineStatus(
-      `${engines[engineSelect.value].detail} ready - ${loadMs.toFixed(0)} ms`,
-      "ready",
-    );
-    return;
+    engineReady = false;
+    if (worker) {
+      worker.terminate();
+      worker = undefined;
+    }
+    errorElement.textContent = message;
+    setEngineStatus("Engine load failed", "error");
+    priceButton.disabled = false;
+    priceButton.textContent = `Retry ${engines[engineSelect.value].label} engine`;
   }
 
-  if (message.type === "error") {
-    if (message.requestId !== undefined) {
+  function renderDistribution() {
+    if (!hasDistribution || !latestDistribution || distributionPanel.hidden) return;
+    drawHistogram(terminalChart, latestDistribution.terminalPrices, "#5ee1c2");
+    drawHistogram(payoffChart, latestDistribution.payoffs, "#ffd166");
+    drawPayoffFunction(payoffFunctionChart, latestDistribution.inputs, latestDistribution.terminalPrices);
+  }
+
+  function handleWorkerMessage(event) {
+    const message = event.data;
+
+    if (message.type === "ready") {
+      clearEngineLoadTimer();
+      engineReady = true;
       setBusy(false);
-      errorElement.textContent = message.message;
-      setEngineStatus(`${engines[engineSelect.value].detail} ready`, "ready");
-    } else {
-      showEngineLoadFailure(message.message);
-    }
-    return;
-  }
-
-  if (message.type !== "result" || message.requestId !== requestId) return;
-
-  setBusy(false);
-  const engine = engines[engineSelect.value];
-  const inputs = pendingInputs;
-  const isMonteCarlo = inputs.method === "monte-carlo";
-  setEngineStatus(`${engine.detail} ready`, "ready");
-
-  priceOutput.textContent = formatNumber(message.price);
-  const payoffFormula = inputs.optionType === "call"
-    ? "max(Sₜ − K, 0)"
-    : "max(K − Sₜ, 0)";
-  payoffOutput.textContent = inputs.exerciseStyle === "american"
-    ? `${payoffFormula} · early exercise allowed`
-    : payoffFormula;
-
-  if (isMonteCarlo) {
-    const hasStatisticalInterval = inputs.sampling !== "sobol";
-    const lower = message.price - 1.96 * message.standardError;
-    const upper = message.price + 1.96 * message.standardError;
-    const pathsPerSecond = inputs.paths / (message.elapsedMs / 1000);
-    errorOutput.textContent = inputs.sampling === "sobol"
-      ? `sample SE ${formatNumber(message.standardError)} · descriptive only`
-      : `SE ${formatNumber(message.standardError)}`;
-    intervalOutput.textContent = `${formatNumber(lower)} - ${formatNumber(upper)}`;
-    intervalRow.hidden = !hasStatisticalInterval;
-    stdOutput.textContent = formatNumber(message.standardDeviation);
-    stdRow.hidden = false;
-    samplingOutput.textContent = samplingLabels[inputs.sampling];
-    samplingRow.hidden = false;
-    varianceOutput.textContent = varianceLabels[inputs.varianceReduction];
-    varianceRow.hidden = false;
-    workloadOutput.textContent = `${new Intl.NumberFormat("en-US").format(inputs.paths)} paths - ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(pathsPerSecond)}/s`;
-  } else {
-    if (inputs.method === "closed-form") {
-      errorOutput.textContent = "Analytic benchmark";
-    } else if (inputs.method === "binomial") {
-      errorOutput.textContent = `${new Intl.NumberFormat("en-US").format(inputs.steps)}-step approximation`;
-    } else if (inputs.method === "carr-randomization") {
-      errorOutput.textContent = "Erlang maturity randomization with two-level Richardson extrapolation";
-    } else {
-      errorOutput.textContent = "Semi-closed American approximation";
-    }
-    intervalRow.hidden = true;
-    stdRow.hidden = true;
-    samplingRow.hidden = true;
-    varianceRow.hidden = true;
-    workloadOutput.textContent = inputs.method === "closed-form"
-      ? "Analytic formula"
-      : inputs.method === "binomial"
-        ? `${new Intl.NumberFormat("en-US").format(inputs.steps)} time steps`
-        : inputs.method === "carr-randomization"
-          ? `${new Intl.NumberFormat("en-US").format(inputs.carrPhases)} + ${new Intl.NumberFormat("en-US").format(2 * inputs.carrPhases)} Erlang phases`
-          : "Semi-closed approximation";
-  }
-
-  runtimeOutput.textContent = `${message.elapsedMs.toFixed(1)} ms`;
-  engineOutput.textContent = engine.detail;
-  methodOutput.textContent = methods[inputs.method].label;
-  exerciseOutput.textContent = inputs.exerciseStyle === "american" ? "American" : "European";
-  resultPanel.hidden = false;
-  addHistoryEntry(inputs, engineSelect.value, message);
-
-  if (isMonteCarlo && inputs.includeDistribution && message.distribution) {
-    latestDistribution = { ...message.distribution, inputs };
-    payoffChartTitle.textContent = inputs.optionType === "call"
-      ? "European call payoff function"
-      : "European put payoff function";
-    distributionPanel.hidden = false;
-    window.requestAnimationFrame(renderDistribution);
-  } else {
-    latestDistribution = undefined;
-    distributionPanel.hidden = true;
-  }
-}
-
-function handleWorkerError() {
-  showEngineLoadFailure("The pricing worker could not start. Click retry to load it again.");
-}
-
-function selectEngine() {
-  const engine = engines[engineSelect.value];
-  clearEngineLoadTimer();
-  errorElement.textContent = "";
-  resultPanel.hidden = true;
-  distributionPanel.hidden = true;
-  latestDistribution = undefined;
-  engineReady = false;
-  requestId += 1;
-
-  if (worker) {
-    worker.terminate();
-    worker = undefined;
-  }
-
-  priceButton.disabled = true;
-  priceButton.textContent = `Loading ${engine.label} engine...`;
-  setEngineStatus(`Loading ${engine.detail}...`, "working");
-  engineLoadStartedAt = performance.now();
-  worker = new Worker(engine.workerUrl, { type: engine.workerType });
-  worker.addEventListener("message", handleWorkerMessage);
-  worker.addEventListener("error", handleWorkerError);
-  engineLoadTimer = window.setTimeout(() => {
-    if (!engineReady) {
-      showEngineLoadFailure(
-        `The engine took longer than ${engine.loadTimeoutMs / 1000} seconds to load. Click retry instead of waiting indefinitely.`,
+      const loadMs = performance.now() - engineLoadStartedAt;
+      setEngineStatus(
+        `${engines[engineSelect.value].detail} ready - ${loadMs.toFixed(0)} ms`,
+        "ready",
       );
+      return;
     }
-  }, engine.loadTimeoutMs);
-}
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  errorElement.textContent = "";
+    if (message.type === "error") {
+      if (message.requestId !== undefined) {
+        setBusy(false);
+        errorElement.textContent = message.message;
+        setEngineStatus(`${engines[engineSelect.value].detail} ready`, "ready");
+      } else {
+        showEngineLoadFailure(message.message);
+      }
+      return;
+    }
 
-  if (!engineReady) {
-    selectEngine();
-    return;
+    if (message.type !== "result" || message.requestId !== requestId) return;
+
+    setBusy(false);
+    const engine = engines[engineSelect.value];
+    const inputs = pendingInputs;
+    const isMonteCarlo = inputs.method === "monte-carlo";
+    setEngineStatus(`${engine.detail} ready`, "ready");
+
+    priceOutput.textContent = formatNumber(message.price);
+    const payoffFormula = inputs.optionType === "call"
+      ? "max(Sₜ − K, 0)"
+      : "max(K − Sₜ, 0)";
+    payoffOutput.textContent = inputs.exerciseStyle === "american"
+      ? `${payoffFormula} · early exercise allowed`
+      : payoffFormula;
+
+    if (isMonteCarlo) {
+      const hasStatisticalInterval = inputs.sampling !== "sobol";
+      const lower = message.price - 1.96 * message.standardError;
+      const upper = message.price + 1.96 * message.standardError;
+      const pathsPerSecond = inputs.paths / (message.elapsedMs / 1000);
+      errorOutput.textContent = inputs.sampling === "sobol"
+        ? `sample SE ${formatNumber(message.standardError)} · descriptive only`
+        : `SE ${formatNumber(message.standardError)}`;
+      intervalOutput.textContent = `${formatNumber(lower)} - ${formatNumber(upper)}`;
+      intervalRow.hidden = !hasStatisticalInterval;
+      stdOutput.textContent = formatNumber(message.standardDeviation);
+      stdRow.hidden = false;
+      samplingOutput.textContent = samplingLabels[inputs.sampling];
+      samplingRow.hidden = false;
+      varianceOutput.textContent = varianceLabels[inputs.varianceReduction];
+      varianceRow.hidden = false;
+      workloadOutput.textContent = `${new Intl.NumberFormat("en-US").format(inputs.paths)} paths - ${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(pathsPerSecond)}/s`;
+    } else {
+      if (inputs.method === "closed-form") {
+        errorOutput.textContent = "Analytic benchmark";
+      } else if (inputs.method === "binomial") {
+        errorOutput.textContent = `${new Intl.NumberFormat("en-US").format(inputs.steps)}-step approximation`;
+      } else if (inputs.method === "carr-randomization") {
+        errorOutput.textContent = "Erlang maturity randomization with two-level Richardson extrapolation";
+      } else {
+        errorOutput.textContent = "Semi-closed American approximation";
+      }
+      intervalRow.hidden = true;
+      stdRow.hidden = true;
+      samplingRow.hidden = true;
+      varianceRow.hidden = true;
+      workloadOutput.textContent = inputs.method === "closed-form"
+        ? "Analytic formula"
+        : inputs.method === "binomial"
+          ? `${new Intl.NumberFormat("en-US").format(inputs.steps)} time steps`
+          : inputs.method === "carr-randomization"
+            ? `${new Intl.NumberFormat("en-US").format(inputs.carrPhases)} + ${new Intl.NumberFormat("en-US").format(2 * inputs.carrPhases)} Erlang phases`
+            : "Semi-closed approximation";
+    }
+
+    runtimeOutput.textContent = `${message.elapsedMs.toFixed(1)} ms`;
+    engineOutput.textContent = engine.detail;
+    methodOutput.textContent = methods[inputs.method].label;
+    exerciseOutput.textContent = inputs.exerciseStyle === "american" ? "American" : "European";
+    resultPanel.hidden = false;
+    addHistoryEntry(inputs, engineSelect.value, message);
+
+    if (hasDistribution && isMonteCarlo && inputs.includeDistribution && message.distribution) {
+      latestDistribution = { ...message.distribution, inputs };
+      payoffChartTitle.textContent = inputs.optionType === "call"
+        ? "European call payoff function"
+        : "European put payoff function";
+      distributionPanel.hidden = false;
+      window.requestAnimationFrame(renderDistribution);
+    } else if (hasDistribution) {
+      latestDistribution = undefined;
+      distributionPanel.hidden = true;
+    }
   }
-  if (!form.reportValidity()) return;
 
-  const method = methodSelect.value;
-  const inputs = {
-    spot: readNumber("spot"),
-    strike: readNumber("strike"),
-    rate: readNumber("rate") / 100,
-    dividendYield: readNumber("dividendYield") / 100,
-    volatility: readNumber("volatility") / 100,
-    maturity: readNumber("maturity"),
-    method,
-    exerciseStyle: exerciseSelect.value,
-    paths: method === "monte-carlo" ? readNumber("paths") : 0,
-    seed: method === "monte-carlo" ? readNumber("seed") : 0,
-    steps: method === "binomial" ? readNumber("steps") : 0,
-    carrPhases: method === "carr-randomization" ? readNumber("carrPhases") : 0,
-    sampling: method === "monte-carlo" ? form.elements.sampling.value : "pcg",
-    varianceReduction: method === "monte-carlo"
-      ? form.elements.varianceReduction.value
-      : "none",
-    includeDistribution: method === "monte-carlo" && form.elements.showDistribution.checked,
-    optionType: form.elements.optionType.value,
-  };
-
-  if (method === "monte-carlo" && (!Number.isInteger(inputs.paths) || inputs.paths < 2 || inputs.paths > 2_000_000)) {
-    errorElement.textContent = "Paths must be a whole number between 2 and 2,000,000.";
-    return;
-  }
-  if (method === "monte-carlo" && inputs.sampling === "rqmc" && inputs.paths < 8) {
-    errorElement.textContent = "Randomized Sobol requires at least 8 paths for its eight shifts.";
-    return;
-  }
-  if (method === "binomial" && (!Number.isInteger(inputs.steps) || inputs.steps < 1 || inputs.steps > 2_000)) {
-    errorElement.textContent = "Binomial steps must be a whole number between 1 and 2,000.";
-    return;
-  }
-  if (method === "carr-randomization" &&
-      (!Number.isInteger(inputs.carrPhases) || inputs.carrPhases < 4 || inputs.carrPhases > 256)) {
-    errorElement.textContent = "Carr Erlang phases must be a whole number between 4 and 256.";
-    return;
-  }
-  if (
-    inputs.exerciseStyle === "american"
-    && method !== "binomial"
-    && (inputs.rate < 0 || inputs.dividendYield < 0)
-  ) {
-    errorElement.textContent = "The American approximations require non-negative rates and dividend yield.";
-    return;
+  function handleWorkerError() {
+    showEngineLoadFailure("The pricing worker could not start. Click retry to load it again.");
   }
 
-  requestId += 1;
-  pendingInputs = inputs;
-  resultPanel.hidden = true;
-  distributionPanel.hidden = true;
-  latestDistribution = undefined;
-  setBusy(true);
-  setEngineStatus(
-    `${engines[engineSelect.value].label} ${methods[method].label} running`,
-    "working",
-  );
-  worker.postMessage({ type: "price", requestId, inputs });
-});
+  function selectEngine() {
+    const engine = engines[engineSelect.value];
+    clearEngineLoadTimer();
+    errorElement.textContent = "";
+    resultPanel.hidden = true;
+    if (hasDistribution) {
+      distributionPanel.hidden = true;
+      latestDistribution = undefined;
+    }
+    engineReady = false;
+    requestId += 1;
 
-window.addEventListener("resize", () => {
-  if (!latestDistribution || distributionPanel.hidden) return;
-  window.cancelAnimationFrame(resizeFrame);
-  resizeFrame = window.requestAnimationFrame(renderDistribution);
-});
+    if (worker) {
+      worker.terminate();
+      worker = undefined;
+    }
 
-if (window.location.protocol === "file:") {
-  setEngineStatus("Opening the required local server...", "working");
-  priceButton.disabled = true;
-  priceButton.textContent = "Opening local server...";
-  window.location.replace("http://127.0.0.1:8000/");
-} else {
+    priceButton.disabled = true;
+    priceButton.textContent = `Loading ${engine.label} engine...`;
+    setEngineStatus(`Loading ${engine.detail}...`, "working");
+    engineLoadStartedAt = performance.now();
+    worker = new Worker(engine.workerUrl, { type: engine.workerType });
+    worker.addEventListener("message", handleWorkerMessage);
+    worker.addEventListener("error", handleWorkerError);
+    engineLoadTimer = window.setTimeout(() => {
+      if (!engineReady) {
+        showEngineLoadFailure(
+          `The engine took longer than ${engine.loadTimeoutMs / 1000} seconds to load. Click retry instead of waiting indefinitely.`,
+        );
+      }
+    }, engine.loadTimeoutMs);
+  }
+
+  function applyEntry(entry) {
+    const { inputs, engineKey } = entry;
+    if (engineSelect.value !== engineKey) {
+      engineSelect.value = engineKey;
+      selectEngine();
+    }
+    exerciseSelect.value = inputs.exerciseStyle;
+    updateMethodOptions();
+    methodSelect.value = inputs.method;
+    updateMethodFields();
+    form.elements.optionType.value = inputs.optionType;
+    form.elements.spot.value = inputs.spot;
+    form.elements.strike.value = inputs.strike;
+    form.elements.maturity.value = inputs.maturity;
+    form.elements.rate.value = inputs.rate * 100;
+    form.elements.dividendYield.value = inputs.dividendYield * 100;
+    form.elements.volatility.value = inputs.volatility * 100;
+    if (inputs.method === "monte-carlo") {
+      form.elements.paths.value = inputs.paths;
+      form.elements.seed.value = inputs.seed;
+      form.elements.sampling.value = inputs.sampling;
+      form.elements.varianceReduction.value = inputs.varianceReduction;
+      if (hasDistribution) form.elements.showDistribution.checked = inputs.includeDistribution;
+    } else if (inputs.method === "binomial") {
+      form.elements.steps.value = inputs.steps;
+    } else if (inputs.method === "carr-randomization") {
+      form.elements.carrPhases.value = inputs.carrPhases;
+    }
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    errorElement.textContent = "";
+
+    if (!engineReady) {
+      selectEngine();
+      return;
+    }
+    if (!form.reportValidity()) return;
+
+    const method = methodSelect.value;
+    const inputs = {
+      spot: readNumber(form, "spot"),
+      strike: readNumber(form, "strike"),
+      rate: readNumber(form, "rate") / 100,
+      dividendYield: readNumber(form, "dividendYield") / 100,
+      volatility: readNumber(form, "volatility") / 100,
+      maturity: readNumber(form, "maturity"),
+      method,
+      exerciseStyle: exerciseSelect.value,
+      paths: method === "monte-carlo" ? readNumber(form, "paths") : 0,
+      seed: method === "monte-carlo" ? readNumber(form, "seed") : 0,
+      steps: method === "binomial" ? readNumber(form, "steps") : 0,
+      carrPhases: method === "carr-randomization" ? readNumber(form, "carrPhases") : 0,
+      sampling: method === "monte-carlo" ? form.elements.sampling.value : "pcg",
+      varianceReduction: method === "monte-carlo"
+        ? form.elements.varianceReduction.value
+        : "none",
+      includeDistribution: hasDistribution && method === "monte-carlo" && form.elements.showDistribution.checked,
+      optionType: form.elements.optionType.value,
+    };
+
+    if (method === "monte-carlo" && (!Number.isInteger(inputs.paths) || inputs.paths < 2 || inputs.paths > 2_000_000)) {
+      errorElement.textContent = "Paths must be a whole number between 2 and 2,000,000.";
+      return;
+    }
+    if (method === "monte-carlo" && inputs.sampling === "rqmc" && inputs.paths < 8) {
+      errorElement.textContent = "Randomized Sobol requires at least 8 paths for its eight shifts.";
+      return;
+    }
+    if (method === "binomial" && (!Number.isInteger(inputs.steps) || inputs.steps < 1 || inputs.steps > 2_000)) {
+      errorElement.textContent = "Binomial steps must be a whole number between 1 and 2,000.";
+      return;
+    }
+    if (method === "carr-randomization" &&
+        (!Number.isInteger(inputs.carrPhases) || inputs.carrPhases < 4 || inputs.carrPhases > 256)) {
+      errorElement.textContent = "Carr Erlang phases must be a whole number between 4 and 256.";
+      return;
+    }
+    if (
+      inputs.exerciseStyle === "american"
+      && method !== "binomial"
+      && (inputs.rate < 0 || inputs.dividendYield < 0)
+    ) {
+      errorElement.textContent = "The American approximations require non-negative rates and dividend yield.";
+      return;
+    }
+
+    requestId += 1;
+    pendingInputs = inputs;
+    resultPanel.hidden = true;
+    if (hasDistribution) {
+      distributionPanel.hidden = true;
+      latestDistribution = undefined;
+    }
+    setBusy(true);
+    setEngineStatus(
+      `${engines[engineSelect.value].label} ${methods[method].label} running`,
+      "working",
+    );
+    worker.postMessage({ type: "price", requestId, inputs });
+  });
+
+  if (hasDistribution) {
+    window.addEventListener("resize", () => {
+      if (!latestDistribution || distributionPanel.hidden) return;
+      window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(renderDistribution);
+    });
+  }
+
   engineSelect.addEventListener("change", selectEngine);
   methodSelect.addEventListener("change", updateMethodFields);
   exerciseSelect.addEventListener("change", updateMethodOptions);
   updateMethodOptions();
   selectEngine();
+
+  return { form, engineSelect, methodSelect, exerciseSelect, selectEngine, updateMethodOptions, updateMethodFields, applyEntry };
+}
+
+// ===================== Drag-and-drop module copy =====================
+//
+// Each of the 3 field-section modules (Underlying asset(s), Contractual
+// info, Model) can be dragged by its label onto the same module in another
+// panel to copy just that module's field values across -- lets you build
+// two scenarios that share, say, the same underlying but differ in strike.
+
+function copyModuleValues(sourceSection, targetSection, targetPanel) {
+  const sourceFields = [...sourceSection.querySelectorAll("input, select")];
+  const targetFields = [...targetSection.querySelectorAll("input, select")];
+  sourceFields.forEach((sourceField, index) => {
+    const targetField = targetFields[index];
+    if (!targetField) return;
+    if (sourceField.type === "checkbox") {
+      targetField.checked = sourceField.checked;
+    } else {
+      targetField.value = sourceField.value;
+    }
+  });
+
+  const module = targetSection.dataset.module;
+  if (module === "contractual") {
+    targetPanel.updateMethodOptions();
+  } else if (module === "model") {
+    const sourceEngine = sourceSection.querySelector('[name="engine"]')?.value;
+    if (sourceEngine && targetPanel.engineSelect.value !== sourceEngine) {
+      targetPanel.engineSelect.value = sourceEngine;
+      targetPanel.selectEngine();
+    }
+    targetPanel.updateMethodFields();
+  }
+}
+
+function initModuleDragAndDrop() {
+  document.querySelectorAll(".field-section[data-module]").forEach((section) => {
+    const handle = section.querySelector(".module-drag-handle");
+    if (!handle) return;
+    handle.draggable = true;
+    handle.addEventListener("dragstart", (event) => {
+      const panelRoot = section.closest("[data-panel]");
+      event.dataTransfer.setData("text/plain", `${panelRoot.dataset.panel}|${section.dataset.module}`);
+      event.dataTransfer.effectAllowed = "copy";
+    });
+
+    section.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      section.classList.add("drag-target");
+    });
+
+    section.addEventListener("dragleave", () => {
+      section.classList.remove("drag-target");
+    });
+
+    section.addEventListener("drop", (event) => {
+      event.preventDefault();
+      section.classList.remove("drag-target");
+      const [sourcePanelSuffix, module] = event.dataTransfer.getData("text/plain").split("|");
+      const targetPanelRoot = section.closest("[data-panel]");
+      const targetPanelSuffix = targetPanelRoot.dataset.panel;
+      if (sourcePanelSuffix === targetPanelSuffix || module !== section.dataset.module) return;
+      const sourceSection = document.querySelector(
+        `[data-panel="${sourcePanelSuffix}"] .field-section[data-module="${module}"]`,
+      );
+      const targetPanel = panels[targetPanelSuffix];
+      if (!sourceSection || !targetPanel) return;
+      copyModuleValues(sourceSection, section, targetPanel);
+    });
+  });
+}
+
+// ===================== Boot =====================
+
+if (window.location.protocol === "file:") {
+  const priceButton = document.querySelector("#price-button");
+  const statusElement = document.querySelector("#engine-status");
+  statusElement.textContent = "Opening the required local server...";
+  statusElement.dataset.state = "working";
+  priceButton.disabled = true;
+  priceButton.textContent = "Opening local server...";
+  window.location.replace("http://127.0.0.1:8000/");
+} else {
+  panels[""] = initPricingPanel("", { hasDistribution: true });
+
+  const compareButton = document.querySelector("#compare-button");
+  const panel2Container = document.querySelector("#panel-2");
+  if (compareButton && panel2Container) {
+    let panel2Initialized = false;
+    compareButton.addEventListener("click", () => {
+      panel2Container.hidden = false;
+      compareButton.hidden = true;
+      if (!panel2Initialized) {
+        panels["-2"] = initPricingPanel("-2", { hasDistribution: false });
+        panel2Initialized = true;
+      }
+    });
+  }
+
+  initModuleDragAndDrop();
 }

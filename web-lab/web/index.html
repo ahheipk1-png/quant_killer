@@ -42,10 +42,55 @@
         <span id="engine-status" data-state="working">Loading C++ WebAssembly engine…</span>
       </div>
 
-      <section class="workspace" aria-label="European option pricer">
+      <div class="panel-toolbar">
+        <button id="compare-button" type="button" class="text-button">+ Compare</button>
+        <p class="panel-toolbar-hint">Drag a module's label onto the other panel to copy its values across.</p>
+      </div>
+
+      <section class="workspace" aria-label="European option pricer" data-panel="">
         <form id="pricing-form" class="panel form-panel">
-          <div class="field-section">
-            <p class="field-section-label">Contract &amp; market</p>
+          <div class="field-section" data-module="asset">
+            <p class="field-section-label">
+              <span class="module-drag-handle" aria-hidden="true" title="Drag onto the other panel to copy">⠿</span>
+              Underlying asset(s)
+            </p>
+            <div class="form-grid">
+              <div class="field">
+                <label for="spot">Spot price</label>
+                <input id="spot" name="spot" type="number" min="0.000001" step="any" value="100" required>
+              </div>
+
+              <div class="field">
+                <label for="volatility">Volatility</label>
+                <div class="input-wrap">
+                  <input id="volatility" name="volatility" type="number" min="0" step="any" value="20" required>
+                  <span class="suffix">%</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="dividend-yield">Dividend yield</label>
+                <div class="input-wrap">
+                  <input id="dividend-yield" name="dividendYield" type="number" step="any" value="0" required>
+                  <span class="suffix">%</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="rate">Risk-free rate</label>
+                <div class="input-wrap">
+                  <input id="rate" name="rate" type="number" step="any" value="5" required>
+                  <span class="suffix">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-section" data-module="contractual">
+            <p class="field-section-label">
+              <span class="module-drag-handle" aria-hidden="true" title="Drag onto the other panel to copy">⠿</span>
+              Contractual info
+            </p>
             <div class="form-grid">
               <div class="field">
                 <label for="option-type">Option type</label>
@@ -64,11 +109,6 @@
               </div>
 
               <div class="field">
-                <label for="spot">Spot price</label>
-                <input id="spot" name="spot" type="number" min="0.000001" step="any" value="100" required>
-              </div>
-
-              <div class="field">
                 <label for="strike">Strike price</label>
                 <input id="strike" name="strike" type="number" min="0.000001" step="any" value="100" required>
               </div>
@@ -80,35 +120,14 @@
                   <span class="suffix">years</span>
                 </div>
               </div>
-
-              <div class="field">
-                <label for="rate">Risk-free rate</label>
-                <div class="input-wrap">
-                  <input id="rate" name="rate" type="number" step="any" value="5" required>
-                  <span class="suffix">%</span>
-                </div>
-              </div>
-
-              <div class="field">
-                <label for="dividend-yield">Dividend yield</label>
-                <div class="input-wrap">
-                  <input id="dividend-yield" name="dividendYield" type="number" step="any" value="0" required>
-                  <span class="suffix">%</span>
-                </div>
-              </div>
-
-              <div class="field">
-                <label for="volatility">Volatility</label>
-                <div class="input-wrap">
-                  <input id="volatility" name="volatility" type="number" min="0" step="any" value="20" required>
-                  <span class="suffix">%</span>
-                </div>
-              </div>
             </div>
           </div>
 
-          <div class="field-section">
-            <p class="field-section-label">Pricing engine &amp; method</p>
+          <div class="field-section" data-module="model">
+            <p class="field-section-label">
+              <span class="module-drag-handle" aria-hidden="true" title="Drag onto the other panel to copy">⠿</span>
+              Model
+            </p>
             <div class="form-grid">
               <div class="field engine-field">
                 <label for="engine">Pricing language</label>
@@ -232,6 +251,217 @@
               <div class="result-row">
                 <dt>Workload</dt>
                 <dd id="workload-output">—</dd>
+              </div>
+            </dl>
+          </div>
+          <div class="result-placeholder">
+            <p>Your pricing result will appear here.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section id="panel-2" class="workspace" aria-label="Comparison option pricer" data-panel="-2" hidden>
+        <form id="pricing-form-2" class="panel form-panel">
+          <div class="engine-line panel-engine-line">
+            <span class="engine-dot" aria-hidden="true"></span>
+            <span id="engine-status-2" data-state="working">Loading C++ WebAssembly engine…</span>
+          </div>
+
+          <div class="field-section" data-module="asset">
+            <p class="field-section-label">
+              <span class="module-drag-handle" aria-hidden="true" title="Drag onto the other panel to copy">⠿</span>
+              Underlying asset(s)
+            </p>
+            <div class="form-grid">
+              <div class="field">
+                <label for="spot-2">Spot price</label>
+                <input id="spot-2" name="spot" type="number" min="0.000001" step="any" value="100" required>
+              </div>
+
+              <div class="field">
+                <label for="volatility-2">Volatility</label>
+                <div class="input-wrap">
+                  <input id="volatility-2" name="volatility" type="number" min="0" step="any" value="20" required>
+                  <span class="suffix">%</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="dividend-yield-2">Dividend yield</label>
+                <div class="input-wrap">
+                  <input id="dividend-yield-2" name="dividendYield" type="number" step="any" value="0" required>
+                  <span class="suffix">%</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="rate-2">Risk-free rate</label>
+                <div class="input-wrap">
+                  <input id="rate-2" name="rate" type="number" step="any" value="5" required>
+                  <span class="suffix">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-section" data-module="contractual">
+            <p class="field-section-label">
+              <span class="module-drag-handle" aria-hidden="true" title="Drag onto the other panel to copy">⠿</span>
+              Contractual info
+            </p>
+            <div class="form-grid">
+              <div class="field">
+                <label for="option-type-2">Option type</label>
+                <select id="option-type-2" name="optionType">
+                  <option value="call">Call</option>
+                  <option value="put">Put</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="exercise-style-2">Exercise style</label>
+                <select id="exercise-style-2" name="exerciseStyle">
+                  <option value="european">European</option>
+                  <option value="american">American</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="strike-2">Strike price</label>
+                <input id="strike-2" name="strike" type="number" min="0.000001" step="any" value="100" required>
+              </div>
+
+              <div class="field">
+                <label for="maturity-2">Time to maturity</label>
+                <div class="input-wrap">
+                  <input id="maturity-2" name="maturity" type="number" min="0.000001" step="any" value="1" required>
+                  <span class="suffix">years</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-section" data-module="model">
+            <p class="field-section-label">
+              <span class="module-drag-handle" aria-hidden="true" title="Drag onto the other panel to copy">⠿</span>
+              Model
+            </p>
+            <div class="form-grid">
+              <div class="field engine-field">
+                <label for="engine-2">Pricing language</label>
+                <select id="engine-2" name="engine">
+                  <option value="cpp">C++ · WebAssembly</option>
+                  <option value="python">Python · Pyodide</option>
+                  <option value="rust">Rust · WebAssembly</option>
+                  <option value="csharp">C# · .NET WebAssembly</option>
+                </select>
+              </div>
+
+              <div class="field engine-field">
+                <label for="method-2">Pricing method</label>
+                <select id="method-2" name="method">
+                  <option value="monte-carlo">Monte Carlo simulation</option>
+                  <option value="closed-form">Black-Scholes closed form</option>
+                  <option value="binomial">CRR binomial tree</option>
+                </select>
+              </div>
+
+              <div class="field" data-method-only="monte-carlo" hidden>
+                <label for="paths-2">Monte Carlo paths</label>
+                <input id="paths-2" name="paths" type="number" min="2" max="2000000" step="1" value="100000" required>
+              </div>
+
+              <div class="field" data-method-only="monte-carlo" hidden>
+                <label for="seed-2">Random seed</label>
+                <input id="seed-2" name="seed" type="number" min="0" max="4294967295" step="1" value="42" required>
+              </div>
+
+              <div class="field" data-method-only="monte-carlo" hidden>
+                <label for="sampling-2">Sampling sequence</label>
+                <select id="sampling-2" name="sampling">
+                  <option value="pcg">Pseudo-random · PCG32</option>
+                  <option value="sobol">QMC · Sobol</option>
+                  <option value="rqmc">Randomized QMC · Sobol (8 shifts)</option>
+                </select>
+              </div>
+
+              <div class="field" data-method-only="monte-carlo" hidden>
+                <label for="variance-reduction-2">Variance control</label>
+                <select id="variance-reduction-2" name="varianceReduction">
+                  <option value="none">None</option>
+                  <option value="antithetic" selected>Antithetic variates</option>
+                  <option value="control">Discounted-stock control variate</option>
+                  <option value="antithetic-control">Antithetic + control variate</option>
+                </select>
+              </div>
+
+              <div class="field" data-method-only="binomial" hidden>
+                <label for="steps-2">Binomial steps</label>
+                <input id="steps-2" name="steps" type="number" min="1" max="2000" step="1" value="500" required disabled>
+              </div>
+
+              <div class="field" data-method-only="carr-randomization" hidden>
+                <label for="carr-phases-2">Carr Erlang phases</label>
+                <input id="carr-phases-2" name="carrPhases" type="number" min="4" max="256" step="1" value="32" required disabled>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <label class="checkbox" for="show-distribution-2" data-method-only="monte-carlo" hidden>
+              <input id="show-distribution-2" name="showDistribution" type="checkbox">
+              Show terminal-price and payoff distributions
+            </label>
+            <button id="price-button-2" type="submit" disabled>Loading C++ engine…</button>
+          </div>
+          <p id="form-error-2" class="error" role="alert"></p>
+        </form>
+
+        <aside class="panel" aria-live="polite">
+          <div id="result-panel-2" class="result-panel" hidden>
+            <h2>Estimated option value</h2>
+            <p id="price-output-2" class="price">—</p>
+            <p id="error-output-2" class="standard-error">—</p>
+            <dl class="result-list">
+              <div class="result-row">
+                <dt>Pricing method</dt>
+                <dd id="method-output-2">-</dd>
+              </div>
+              <div class="result-row">
+                <dt>Exercise style</dt>
+                <dd id="exercise-output-2">—</dd>
+              </div>
+              <div class="result-row">
+                <dt>Pricing engine</dt>
+                <dd id="engine-output-2">—</dd>
+              </div>
+              <div id="interval-row-2" class="result-row" hidden>
+                <dt>95% confidence interval</dt>
+                <dd id="interval-output-2">—</dd>
+              </div>
+              <div id="std-row-2" class="result-row" hidden>
+                <dt>Estimator std. deviation</dt>
+                <dd id="std-output-2">—</dd>
+              </div>
+              <div id="sampling-row-2" class="result-row" hidden>
+                <dt>Sampling</dt>
+                <dd id="sampling-output-2">—</dd>
+              </div>
+              <div id="variance-row-2" class="result-row" hidden>
+                <dt>Variance control</dt>
+                <dd id="variance-output-2">—</dd>
+              </div>
+              <div class="result-row">
+                <dt>Payoff function</dt>
+                <dd id="payoff-output-2">—</dd>
+              </div>
+              <div class="result-row">
+                <dt>Calculation time</dt>
+                <dd id="runtime-output-2">—</dd>
+              </div>
+              <div class="result-row">
+                <dt>Workload</dt>
+                <dd id="workload-output-2">—</dd>
               </div>
             </dl>
           </div>
