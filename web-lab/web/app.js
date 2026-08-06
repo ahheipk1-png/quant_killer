@@ -493,42 +493,6 @@ function summarizeModule(root, module) {
     const methodLabel = exotic ? (ExoticFields.methodLabels[method] || method) : methods[method].label;
     return `${engineLabelFor(root)} · ${methodLabel}`;
   }
-  if (module === "barrier-terms") {
-    const style = q("barrierStyle").value === "in" ? "knock-in" : "knock-out";
-    if (payoffType === "double-barrier") {
-      return `Double ${style} · ${formatNumber(Number(q("lowerBarrier").value), 2)} - ${formatNumber(Number(q("upperBarrier").value), 2)}`;
-    }
-    const direction = q("barrierDirection").value === "down" ? "Down" : "Up";
-    return `${direction} ${style} @ ${formatNumber(Number(q("barrier").value), 2)}`;
-  }
-  if (module === "schedule") {
-    const mode = q("scheduleMode").value;
-    const modeLabel = mode === "equal" ? "Equally spaced" : mode === "custom" ? "Custom dates" : "Monthly business day";
-    const count = payoffType === "bermudan" ? q("exerciseDates").value : q("monitoringSteps").value;
-    return `${modeLabel} · ${formatNumber(Number(count), 0)} observations`;
-  }
-  if (module === "basket") {
-    return `${q("basketAssetCount").value}-asset basket · correlation ${formatNumber(Number(q("correlation").value), 2)}`;
-  }
-  if (module === "note-terms") {
-    if (payoffType === "accumulator") {
-      return `Gearing ${formatNumber(Number(q("accumulatorGearing").value), 2)} · knock-out ${formatNumber(Number(q("accumulatorKnockOut").value), 2)}`;
-    }
-    if (payoffType === "himalayan") {
-      return `${q("observations").value} lock-ins · notional ${formatNumber(Number(q("notional").value), 2)}`;
-    }
-    return `Notional ${formatNumber(Number(q("notional").value), 2)} · coupon ${formatNumber(Number(q("coupon").value), 2)}%`;
-  }
-  if (module === "compound-terms") {
-    return `${q("compoundOuterType").value === "put" ? "Put" : "Call"} on ${q("compoundInnerType").value} · `
-      + `decision @ ${formatNumber(Number(q("decisionTime").value), 4)} yr`;
-  }
-  if (module === "variance-terms") {
-    const isVol = payoffType.startsWith("volatility");
-    const strikeField = isVol ? "volatilityStrike" : "varianceStrike";
-    return `${isVol ? "Vol" : "Variance"} strike ${formatNumber(Number(q(strikeField).value), 2)}% · `
-      + `notional ${formatNumber(Number(q("varianceNotional").value), 2)}`;
-  }
   return "";
 }
 
@@ -578,14 +542,8 @@ function createInstrumentPanel(prefillEntry) {
   const removeButton = root.querySelector(".instrument-remove");
   const payoffTypeSelect = root.querySelector('[name="payoffType"]');
   const volatilityModelSelect = root.querySelector('[name="volatilityModel"]');
-  const barrierTermsTrigger = root.querySelector('.module-trigger[data-module="barrier-terms"]');
-  const scheduleTrigger = root.querySelector('.module-trigger[data-module="schedule"]');
-  const basketTrigger = root.querySelector('.module-trigger[data-module="basket"]');
-  const noteTermsTrigger = root.querySelector('.module-trigger[data-module="note-terms"]');
-  const compoundTermsTrigger = root.querySelector('.module-trigger[data-module="compound-terms"]');
-  const varianceTermsTrigger = root.querySelector('.module-trigger[data-module="variance-terms"]');
   const optionTypeToggle = root.querySelector('[data-optiontype-toggle]');
-  const scheduleModeSelect = root.querySelector('.module-dialog[data-module="schedule"] [name="scheduleMode"]');
+  const scheduleModeSelect = root.querySelector('.module-dialog[data-module="contractual"] [name="scheduleMode"]');
 
   const priceOutput = root.querySelector(".price-output");
   const errorOutput = root.querySelector(".error-output");
@@ -699,7 +657,7 @@ function createInstrumentPanel(prefillEntry) {
   }
 
   function updateExoticScheduleFields() {
-    const scheduleDialog = root.querySelector('.module-dialog[data-module="schedule"]');
+    const scheduleDialog = root.querySelector('.module-dialog[data-module="contractual"]');
     const mode = scheduleModeSelect.value;
     const product = payoffTypeSelect.value;
     // Bermudan uses its own "exerciseDates" count field instead of the
@@ -775,19 +733,11 @@ function createInstrumentPanel(prefillEntry) {
       "autocallable", "phoenix-autocall", "yield-seeker", "himalayan",
       "variance-swap", "volatility-swap", "variance-option", "volatility-option", "accumulator",
     ]);
-    const NOTE_PRODUCTS = new Set(["autocallable", "phoenix-autocall", "yield-seeker", "himalayan", "accumulator"]);
-    const VARIANCE_PRODUCTS = new Set(["variance-swap", "volatility-swap", "variance-option", "volatility-option"]);
     const NO_OPTION_TYPE = new Set([
       "autocallable", "phoenix-autocall", "yield-seeker", "himalayan", "compound",
       "variance-swap", "volatility-swap", "accumulator",
     ]);
 
-    barrierTermsTrigger.hidden = !(product === "barrier" || product === "double-barrier");
-    scheduleTrigger.hidden = !SCHEDULE_PRODUCTS.has(product);
-    basketTrigger.hidden = !(product === "rainbow" || product === "himalayan");
-    noteTermsTrigger.hidden = !NOTE_PRODUCTS.has(product);
-    compoundTermsTrigger.hidden = product !== "compound";
-    varianceTermsTrigger.hidden = !VARIANCE_PRODUCTS.has(product);
     optionTypeToggle.hidden = NO_OPTION_TYPE.has(product);
     verifyLinks.hidden = exotic;
 
@@ -1236,8 +1186,7 @@ function createInstrumentPanel(prefillEntry) {
   // must also re-sync the toolbar/Model dialog to whatever payoff type was
   // actually restored, not the tentative one the user was previewing.
   wireModuleDialog("contractual", updatePayoffVisibility);
-  ["asset", "model", "barrier-terms", "schedule", "basket", "note-terms", "compound-terms", "variance-terms"]
-    .forEach((module) => wireModuleDialog(module));
+  ["asset", "model"].forEach((module) => wireModuleDialog(module));
 
   priceButton.addEventListener("click", () => form.requestSubmit());
   resultTrigger.addEventListener("click", () => {
@@ -1302,8 +1251,7 @@ function createInstrumentPanel(prefillEntry) {
     updateExoticMethodFields();
     renderExoticVolatilityFields();
     updateExoticScheduleFields();
-    ["contractual", "asset", "model", "barrier-terms", "schedule", "basket", "note-terms", "compound-terms", "variance-terms"]
-      .forEach(refreshSummary);
+    ["contractual", "asset", "model"].forEach(refreshSummary);
     wasExotic = true;
     selectEngine();
   } else if (prefillEntry) {
@@ -1395,8 +1343,11 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
     // the target's payoff type -- cascade exactly like a manual edit would
     // (toolbar buttons, engine table, method list, exerciseStyle sync).
     targetControl.updatePayoffVisibility();
+    targetControl.updateExoticScheduleFields();
   } else if (module === "model") {
-    const sourceEngine = sourceDialog.querySelector('[name="engine"]')?.value;
+    // engine now lives in the instrument header, not the Model dialog.
+    const sourceRoot = document.querySelector(`[data-panel="${sourcePanelId}"]`);
+    const sourceEngine = sourceRoot?.querySelector('[name="engine"]')?.value;
     const engineIsValidForTarget = sourceEngine
       && [...targetControl.engineSelect.options].some((option) => option.value === sourceEngine);
     if (engineIsValidForTarget && targetControl.engineSelect.value !== sourceEngine) {
@@ -1409,8 +1360,6 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
     } else {
       targetControl.updateMethodFields();
     }
-  } else if (module === "schedule") {
-    targetControl.updateExoticScheduleFields();
   }
   targetControl.refreshSummary(module);
 }

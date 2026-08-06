@@ -873,6 +873,14 @@ button:disabled {
   font-size: 0.86rem;
 }
 
+.engine-select {
+  width: auto;
+  min-height: 32px;
+  padding: 0 28px 0 12px;
+  font-size: 0.86rem;
+  border-radius: 8px;
+}
+
 .instrument-eyebrow {
   margin: 0;
   color: var(--muted);

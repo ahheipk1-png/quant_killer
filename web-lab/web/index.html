@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="exotics.css">
     <script src="polyglot-contract.js" defer></script>
     <script src="exotic-fields.js?v=1" defer></script>
-    <script src="app.js?v=12" defer></script>
+    <script src="app.js?v=13" defer></script>
   </head>
   <body>
     <main class="page-shell">
@@ -68,6 +68,12 @@
           <p class="instrument-eyebrow">Instrument</p>
           <div class="instrument-head-actions">
             <button type="button" class="price-button" disabled>Loading…</button>
+            <select name="engine" class="engine-select" aria-label="Pricing language">
+              <option value="cpp">C++ · WebAssembly</option>
+              <option value="python">Python · Pyodide</option>
+              <option value="rust">Rust · WebAssembly</option>
+              <option value="csharp">C# · .NET WebAssembly</option>
+            </select>
             <button type="button" class="instrument-remove" aria-label="Remove this instrument">×</button>
           </div>
         </div>
@@ -83,48 +89,6 @@
               <span class="module-trigger-label">
                 <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
                 Contractual info
-              </span>
-              <span class="module-trigger-summary"></span>
-            </button>
-            <button type="button" class="module-trigger" data-module="barrier-terms" draggable="true" hidden>
-              <span class="module-trigger-label">
-                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-                Barrier terms
-              </span>
-              <span class="module-trigger-summary"></span>
-            </button>
-            <button type="button" class="module-trigger" data-module="schedule" draggable="true" hidden>
-              <span class="module-trigger-label">
-                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-                Schedule
-              </span>
-              <span class="module-trigger-summary"></span>
-            </button>
-            <button type="button" class="module-trigger" data-module="basket" draggable="true" hidden>
-              <span class="module-trigger-label">
-                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-                Basket / multi-asset
-              </span>
-              <span class="module-trigger-summary"></span>
-            </button>
-            <button type="button" class="module-trigger" data-module="note-terms" draggable="true" hidden>
-              <span class="module-trigger-label">
-                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-                Note terms
-              </span>
-              <span class="module-trigger-summary"></span>
-            </button>
-            <button type="button" class="module-trigger" data-module="compound-terms" draggable="true" hidden>
-              <span class="module-trigger-label">
-                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-                Compound terms
-              </span>
-              <span class="module-trigger-summary"></span>
-            </button>
-            <button type="button" class="module-trigger" data-module="variance-terms" draggable="true" hidden>
-              <span class="module-trigger-label">
-                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-                Variance / vol terms
               </span>
               <span class="module-trigger-summary"></span>
             </button>
@@ -225,16 +189,6 @@
                   <option value="3">Three</option>
                 </select>
               </label>
-            </div>
-            <div class="dialog-actions">
-              <button type="button" class="dialog-cancel">Cancel</button>
-              <button type="button" class="dialog-save">Save</button>
-            </div>
-          </dialog>
-
-          <dialog class="module-dialog" data-module="barrier-terms">
-            <h3>Barrier terms</h3>
-            <div class="form-grid">
               <label class="field" data-payoff-only="barrier">
                 Barrier level
                 <input name="barrier" type="number" min="0.0001" step="any" value="125">
@@ -254,23 +208,13 @@
                 Upper barrier
                 <input name="upperBarrier" type="number" min="0.0001" step="any" value="130" disabled>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="barrier,double-barrier">
                 Barrier style
                 <select name="barrierStyle">
                   <option value="out">Knock-out</option>
                   <option value="in">Knock-in</option>
                 </select>
               </label>
-            </div>
-            <div class="dialog-actions">
-              <button type="button" class="dialog-cancel">Cancel</button>
-              <button type="button" class="dialog-save">Save</button>
-            </div>
-          </dialog>
-
-          <dialog class="module-dialog" data-module="schedule">
-            <h3>Schedule</h3>
-            <div class="form-grid">
               <label class="field" data-payoff-only="digital,barrier,double-barrier,rainbow,autocallable,phoenix-autocall,yield-seeker,himalayan,asian,lookback,ladder,compound,variance-swap,volatility-swap,variance-option,volatility-option,accumulator">
                 Observation count
                 <input name="monitoringSteps" type="number" min="1" max="260" step="1" value="12">
@@ -283,7 +227,7 @@
                 Tree steps
                 <input name="treeSteps" type="number" min="50" max="2000" step="1" value="600" disabled>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="exotic">
                 Observation schedule
                 <select name="scheduleMode">
                   <option value="equal">Equally spaced</option>
@@ -307,16 +251,6 @@
                 <input name="includeInitialFixing" type="checkbox">
                 Include initial spot fixing
               </label>
-            </div>
-            <div class="dialog-actions">
-              <button type="button" class="dialog-cancel">Cancel</button>
-              <button type="button" class="dialog-save">Save</button>
-            </div>
-          </dialog>
-
-          <dialog class="module-dialog" data-module="note-terms">
-            <h3>Note terms</h3>
-            <div class="form-grid">
               <label class="field" data-payoff-only="autocallable,phoenix-autocall,yield-seeker,himalayan,accumulator">
                 Notional
                 <input name="notional" type="number" min="0.01" step="any" value="100">
@@ -367,51 +301,31 @@
                 Knock-out / initial
                 <input name="accumulatorKnockOut" type="number" min="0" step="0.01" value="1.1" disabled>
               </label>
-            </div>
-            <div class="dialog-actions">
-              <button type="button" class="dialog-cancel">Cancel</button>
-              <button type="button" class="dialog-save">Save</button>
-            </div>
-          </dialog>
-
-          <dialog class="module-dialog" data-module="compound-terms">
-            <h3>Compound terms</h3>
-            <div class="form-grid">
-              <label class="field">
+              <label class="field" data-payoff-only="compound">
                 Compound option type
                 <select name="compoundOuterType">
                   <option value="call">Call on inner</option>
                   <option value="put">Put on inner</option>
                 </select>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="compound">
                 Underlying option type
                 <select name="compoundInnerType">
                   <option value="call">Call</option>
                   <option value="put">Put</option>
                 </select>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="compound">
                 Compound decision time
                 <div class="input-wrap">
                   <input name="decisionTime" type="number" min="0.001" step="any" value="0.5">
                   <span class="suffix">years</span>
                 </div>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="compound">
                 Compound strike
                 <input name="compoundStrike" type="number" min="0" step="any" value="5">
               </label>
-            </div>
-            <div class="dialog-actions">
-              <button type="button" class="dialog-cancel">Cancel</button>
-              <button type="button" class="dialog-save">Save</button>
-            </div>
-          </dialog>
-
-          <dialog class="module-dialog" data-module="variance-terms">
-            <h3>Variance / volatility terms</h3>
-            <div class="form-grid">
               <label class="field" data-payoff-only="variance-swap,variance-option">
                 Variance strike · variance × 100
                 <div class="input-wrap">
@@ -426,36 +340,26 @@
                   <span class="suffix">%</span>
                 </div>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="variance-swap,volatility-swap,variance-option,volatility-option">
                 Notional
                 <input name="varianceNotional" type="number" min="0" step="any" value="1000">
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="variance-swap,volatility-swap,variance-option,volatility-option">
                 Annualization factor
                 <input name="annualization" type="number" min="0.001" step="any" value="1">
               </label>
-            </div>
-            <div class="dialog-actions">
-              <button type="button" class="dialog-cancel">Cancel</button>
-              <button type="button" class="dialog-save">Save</button>
-            </div>
-          </dialog>
-
-          <dialog class="module-dialog" data-module="basket">
-            <h3>Basket / multi-asset</h3>
-            <div class="form-grid">
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Basket asset count
                 <select name="basketAssetCount">
                   <option value="2">Two</option>
                   <option value="3" selected>Three</option>
                 </select>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Weights · comma separated
                 <input name="basketWeights" type="text" value="0.5,0.3,0.2">
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Performance order statistic
                 <select name="basketOrder">
                   <option value="1">1 · best</option>
@@ -463,43 +367,43 @@
                   <option value="3">3 · worst of three</option>
                 </select>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Asset 2 spot
                 <input name="spot2" type="number" min="0.0001" step="any" value="100">
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Asset 2 initial volatility
                 <div class="input-wrap">
                   <input name="volatility2" type="number" min="0.01" step="any" value="25" data-transform="percent">
                   <span class="suffix">%</span>
                 </div>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Asset 2 dividend yield
                 <div class="input-wrap">
                   <input name="dividendYield2" type="number" step="any" value="0" data-transform="percent">
                   <span class="suffix">%</span>
                 </div>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Asset 3 spot
                 <input name="spot3" type="number" min="0.0001" step="any" value="100">
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Asset 3 initial volatility
                 <div class="input-wrap">
                   <input name="volatility3" type="number" min="0.01" step="any" value="30" data-transform="percent">
                   <span class="suffix">%</span>
                 </div>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Asset 3 dividend yield
                 <div class="input-wrap">
                   <input name="dividendYield3" type="number" step="any" value="0" data-transform="percent">
                   <span class="suffix">%</span>
                 </div>
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="rainbow,himalayan">
                 Common asset correlation
                 <input name="correlation" type="number" min="-0.49" max="0.99" step="0.01" value="0.35">
               </label>
@@ -548,16 +452,6 @@
           <dialog class="module-dialog" data-module="model">
             <h3>Model</h3>
             <div class="form-grid">
-              <label class="field engine-field">
-                Pricing language
-                <select name="engine">
-                  <option value="cpp">C++ · WebAssembly</option>
-                  <option value="python">Python · Pyodide</option>
-                  <option value="rust">Rust · WebAssembly</option>
-                  <option value="csharp">C# · .NET WebAssembly</option>
-                </select>
-              </label>
-
               <label class="field engine-field">
                 Pricing method
                 <select name="method">
