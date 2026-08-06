@@ -912,6 +912,11 @@ function createInstrumentPanel(prefillEntry) {
 
     ["contractual", "asset", "model"].forEach(refreshSummary);
     selectEngine();
+  } else {
+    // A brand-new instrument opens straight to "what are you pricing" --
+    // option type is the first thing to nail down, everything else
+    // already has a sane default.
+    root.querySelector('.module-trigger[data-module="contractual"]').click();
   }
 
   root.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "end" });
