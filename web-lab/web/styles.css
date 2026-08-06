@@ -55,7 +55,7 @@ select {
 }
 
 h1 {
-  max-width: 760px;
+  max-width: 1040px;
   margin: 0;
   font-size: clamp(2.4rem, 7vw, 5.5rem);
   font-weight: 650;
