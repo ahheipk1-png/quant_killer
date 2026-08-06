@@ -31,6 +31,26 @@ const engines = {
   },
 };
 
+// Exotic payoff types (barrier, asian, rainbow, digital, ...) route through
+// a second, parallel worker pipeline -- same engine choices plus a 5th "js"
+// reference engine, but different worker files and a different request/
+// response message shape (see readExoticConfig/renderExoticResult below).
+// Reuses ExoticFields.languageDefinitions (exotic-fields.js) so the two
+// pages never drift on worker URLs/timeouts.
+const exoticEngines = Object.fromEntries(
+  Object.entries(ExoticFields.languageDefinitions).map(([key, def]) => [key, {
+    label: def.label,
+    detail: def.detail,
+    workerUrl: def.url,
+    workerType: def.type,
+    loadTimeoutMs: def.timeout,
+  }]),
+);
+
+function isExoticPayoff(payoffType) {
+  return Boolean(payoffType) && !payoffType.startsWith("vanilla-");
+}
+
 const methods = {
   "closed-form": { label: "Black-Scholes closed form" },
   binomial: { label: "CRR binomial tree" },
@@ -230,6 +250,32 @@ const historyEntries = [];
 
 function inputSummaryRows(entry) {
   const { inputs, engineKey, result } = entry;
+
+  if (inputs.exotic) {
+    // Generic dump, not a hand-crafted per-product summary: exotic entries
+    // span 18+ wildly different field sets, so this just surfaces whatever
+    // was actually submitted rather than guessing a "nice" presentation.
+    const skip = new Set(["exotic", "product", "method"]);
+    const rows = [
+      ["Engine", (exoticEngines[engineKey] || engines[engineKey])?.label || engineKey],
+      ["Payoff type", ExoticFields.productLabels[inputs.product] || inputs.product],
+      ["Method", ExoticFields.methodLabels[inputs.method] || inputs.method],
+    ];
+    for (const [key, value] of Object.entries(inputs)) {
+      if (skip.has(key) || value === "" || value === undefined || typeof value === "object") continue;
+      rows.push([key, String(value)]);
+    }
+    rows.push(["Price", formatNumber(result.price)]);
+    if (result.standardError !== null && result.standardError !== undefined) {
+      rows.push(
+        ["Std. error", formatNumber(result.standardError)],
+        ["Std. deviation", formatNumber(result.standardDeviation)],
+      );
+    }
+    rows.push(["Runtime", `${result.elapsedMs.toFixed(1)} ms`]);
+    return rows;
+  }
+
   const rows = [
     ["Engine", engines[engineKey].label],
     ["Method", methods[inputs.method].label],
@@ -417,17 +463,24 @@ let panelIdCounter = 0;
 
 function engineLabelFor(root) {
   const engineKey = root.querySelector('[name="engine"]').value;
-  return engines[engineKey].label;
+  return (engines[engineKey] || exoticEngines[engineKey])?.label || engineKey;
 }
 
 function summarizeModule(root, module) {
   const dialog = root.querySelector(`.module-dialog[data-module="${module}"]`);
   const q = (name) => dialog.querySelector(`[name="${name}"]`);
+  const payoffType = root.querySelector('[name="payoffType"]').value;
+  const exotic = isExoticPayoff(payoffType);
+
   if (module === "contractual") {
     const type = dialog.querySelector('input[name="optionType"]:checked').value === "call" ? "Call" : "Put";
-    const exercise = q("exerciseStyle").value === "american" ? "American" : "European";
-    return `${type} · ${exercise} · Strike ${formatNumber(Number(q("strike").value), 2)} · `
+    const strikeMaturity = `Strike ${formatNumber(Number(q("strike").value), 2)} · `
       + `${formatNumber(Number(q("maturity").value), 4)} yr`;
+    if (!exotic) {
+      const exercise = q("exerciseStyle").value === "american" ? "American" : "European";
+      return `${type} · ${exercise} · ${strikeMaturity}`;
+    }
+    return `${ExoticFields.productLabels[payoffType] || payoffType} · ${type} · ${strikeMaturity}`;
   }
   if (module === "asset") {
     return `Spot ${formatNumber(Number(q("spot").value), 2)} · `
@@ -436,7 +489,22 @@ function summarizeModule(root, module) {
       + `Rate ${formatNumber(Number(q("rate").value), 2)}%`;
   }
   if (module === "model") {
-    return `${engineLabelFor(root)} · ${methods[q("method").value].label}`;
+    const method = q("method").value;
+    const methodLabel = exotic ? (ExoticFields.methodLabels[method] || method) : methods[method].label;
+    return `${engineLabelFor(root)} · ${methodLabel}`;
+  }
+  if (module === "barrier-terms") {
+    const direction = q("barrierDirection").value === "down" ? "Down" : "Up";
+    const style = q("barrierStyle").value === "in" ? "knock-in" : "knock-out";
+    return `${direction} ${style} @ ${formatNumber(Number(q("barrier").value), 2)}`;
+  }
+  if (module === "schedule") {
+    const mode = q("scheduleMode").value;
+    const modeLabel = mode === "equal" ? "Equally spaced" : mode === "custom" ? "Custom dates" : "Monthly business day";
+    return `${modeLabel} · ${formatNumber(Number(q("monitoringSteps").value), 0)} observations`;
+  }
+  if (module === "basket") {
+    return `${q("basketAssetCount").value}-asset basket · correlation ${formatNumber(Number(q("correlation").value), 2)}`;
   }
   return "";
 }
@@ -480,10 +548,17 @@ function createInstrumentPanel(prefillEntry) {
   const resultTrigger = root.querySelector('.module-trigger[data-module="result"]');
   const resultDialog = root.querySelector('.module-dialog[data-module="result"]');
   const sourceLink = root.querySelector(".verify-source-link");
+  const verifyLinks = root.querySelector(".verify-links");
   const engineSelect = root.querySelector('[name="engine"]');
   const methodSelect = root.querySelector('[name="method"]');
   const exerciseSelect = root.querySelector('[name="exerciseStyle"]');
   const removeButton = root.querySelector(".instrument-remove");
+  const payoffTypeSelect = root.querySelector('[name="payoffType"]');
+  const volatilityModelSelect = root.querySelector('[name="volatilityModel"]');
+  const barrierTermsTrigger = root.querySelector('.module-trigger[data-module="barrier-terms"]');
+  const scheduleTrigger = root.querySelector('.module-trigger[data-module="schedule"]');
+  const basketTrigger = root.querySelector('.module-trigger[data-module="basket"]');
+  const scheduleModeSelect = root.querySelector('.module-dialog[data-module="schedule"] [name="scheduleMode"]');
 
   const priceOutput = root.querySelector(".price-output");
   const errorOutput = root.querySelector(".error-output");
@@ -500,7 +575,12 @@ function createInstrumentPanel(prefillEntry) {
   const engineOutput = root.querySelector(".engine-output");
   const methodOutput = root.querySelector(".method-output");
   const exerciseOutput = root.querySelector(".exercise-output");
+  const exerciseRow = root.querySelector(".exercise-row");
   const payoffOutput = root.querySelector(".payoff-output");
+  const productOutput = root.querySelector(".product-output");
+  const productRow = root.querySelector(".product-row");
+  const volatilityModelOutput = root.querySelector(".volatility-model-output");
+  const volatilityModelRow = root.querySelector(".volatility-model-row");
   const payoffChartTitle = root.querySelector(".payoff-chart-title");
   const terminalChart = root.querySelector(".terminal-chart");
   const payoffChart = root.querySelector(".payoff-chart");
@@ -512,8 +592,15 @@ function createInstrumentPanel(prefillEntry) {
   let engineLoadTimer;
   let engineLoadStartedAt = 0;
   let pendingInputs;
+  let pendingConfig;
+  let pendingExotic = false;
+  let wasExotic = false;
   let latestDistribution;
   let resizeFrame;
+
+  function engineTable() {
+    return isExoticPayoff(payoffTypeSelect.value) ? exoticEngines : engines;
+  }
 
   function setEngineStatus(label, state) {
     statusElement.textContent = label;
@@ -567,6 +654,129 @@ function createInstrumentPanel(prefillEntry) {
     updateMethodFields();
   }
 
+  // ===== Exotic-payoff mode: everything below is the parallel path used
+  // when payoffType is not "vanilla-*". Vanilla's functions above are
+  // untouched by this -- the two pipelines never call into each other.
+
+  function availableExoticMethods(product) {
+    if (engineSelect.value !== "js") return ["mc"];
+    const methodsForProduct = ExoticFields.referenceMethods[product] || ["mc"];
+    if (volatilityModelSelect.value === "constant") return methodsForProduct;
+    return methodsForProduct.filter((method) => method === "mc" || method === "qmc");
+  }
+
+  function renderExoticVolatilityFields() {
+    const container = root.querySelector(".exotic-volatility-fields");
+    const defs = ExoticFields.volatilityFieldDefinitions[volatilityModelSelect.value] || [];
+    container.replaceChildren(...defs.map((def) => ExoticFields.createField(def)));
+  }
+
+  function updateExoticScheduleFields() {
+    const scheduleDialog = root.querySelector('.module-dialog[data-module="schedule"]');
+    const mode = scheduleModeSelect.value;
+    scheduleDialog.querySelector('[name="monitoringSteps"]').closest(".field").hidden = mode !== "equal";
+    scheduleDialog.querySelector('[name="valuationDate"]').closest(".field").hidden = mode === "equal";
+    scheduleDialog.querySelector('[name="observationDates"]').closest(".field").hidden = mode !== "custom";
+  }
+
+  function updateExoticMethodFields() {
+    const method = methodSelect.value;
+    const isMonteCarloFamily = method === "mc" || method === "qmc";
+
+    // Vanilla-only MC fields never apply to the exotic pipeline -- it has
+    // its own paths/seed + randomizedQmc, not sampling/varianceReduction.
+    ["sampling", "varianceReduction", "showDistribution"].forEach((name) => {
+      const field = form.querySelector(`[name="${name}"]`)?.closest(".field, .checkbox");
+      if (!field) return;
+      field.hidden = true;
+      field.querySelectorAll("input, select").forEach((control) => { control.disabled = true; });
+    });
+    ["paths", "seed"].forEach((name) => {
+      const field = form.querySelector(`[name="${name}"]`).closest(".field");
+      field.hidden = !isMonteCarloFamily;
+      field.querySelectorAll("input, select").forEach((control) => { control.disabled = !isMonteCarloFamily; });
+    });
+    const randomizedQmcField = form.querySelector('[name="randomizedQmc"]').closest(".checkbox");
+    randomizedQmcField.hidden = method !== "qmc";
+    randomizedQmcField.querySelector("input").disabled = method !== "qmc";
+
+    setResultSummary("—");
+    distributionPanel.hidden = true;
+    latestDistribution = undefined;
+    errorElement.textContent = "";
+    refreshSummary("model");
+  }
+
+  function updateExoticMethodOptions() {
+    const product = payoffTypeSelect.value;
+    const previousMethod = methodSelect.value;
+    const methodList = availableExoticMethods(product);
+    methodSelect.replaceChildren(...methodList.map((value) =>
+      new Option(ExoticFields.methodLabels[value] || value, value)));
+    if (methodList.includes(previousMethod)) methodSelect.value = previousMethod;
+    updateExoticMethodFields();
+  }
+
+  function updatePayoffVisibility() {
+    const payoffType = payoffTypeSelect.value;
+    const exotic = isExoticPayoff(payoffType);
+    const product = exotic ? payoffType : null;
+
+    // The "Exercise style" field itself stays hidden -- payoffType now
+    // fully encodes it (vanilla-european/vanilla-american) so there's no
+    // second, independently-editable control to fall out of sync with it.
+    if (!exotic) exerciseSelect.value = payoffType === "vanilla-american" ? "american" : "european";
+
+    root.querySelectorAll("[data-payoff-only]").forEach((element) => {
+      const key = element.dataset.payoffOnly;
+      const visible = key === "vanilla" ? !exotic : key === "exotic" ? exotic : key === product;
+      element.hidden = !visible;
+      element.querySelectorAll("input, select").forEach((control) => { control.disabled = !visible; });
+    });
+
+    barrierTermsTrigger.hidden = product !== "barrier";
+    scheduleTrigger.hidden = !(product === "barrier" || product === "asian");
+    basketTrigger.hidden = product !== "rainbow";
+    verifyLinks.hidden = exotic;
+
+    const hasJsOption = [...engineSelect.options].some((option) => option.value === "js");
+    if (exotic && !hasJsOption) {
+      engineSelect.add(new Option("JavaScript · reference", "js"), engineSelect.options[0]);
+    } else if (!exotic && hasJsOption) {
+      if (engineSelect.value === "js") engineSelect.value = "cpp";
+      [...engineSelect.options].find((option) => option.value === "js")?.remove();
+    }
+
+    if (exotic) {
+      renderExoticVolatilityFields();
+      updateExoticMethodOptions();
+    } else {
+      updateMethodOptions();
+    }
+
+    if (exotic !== wasExotic) {
+      wasExotic = exotic;
+      selectEngine();
+    }
+  }
+
+  function readExoticConfig() {
+    const data = Object.fromEntries(new FormData(form).entries());
+    data.exotic = true;
+    data.product = payoffTypeSelect.value;
+    data.rate = Number(data.rate) / 100;
+    data.dividendYield = Number(data.dividendYield) / 100;
+    data.volatility = Number(data.volatility) / 100;
+    ["volatility2", "dividendYield2", "volatility3", "dividendYield3"].forEach((name) => {
+      if (data[name] !== undefined) data[name] = Number(data[name]) / 100;
+    });
+    data.randomizedQmc = Boolean(form.elements.randomizedQmc?.checked);
+    data.includeInitialFixing = Boolean(form.elements.includeInitialFixing?.checked);
+    data.basketWeights = String(data.basketWeights || "0.5,0.3,0.2").split(",").map(Number).filter(Number.isFinite);
+    data.observationTimes = ExoticFields.buildObservationTimes(data);
+    return data;
+  }
+
   function clearEngineLoadTimer() {
     if (engineLoadTimer) {
       window.clearTimeout(engineLoadTimer);
@@ -603,7 +813,7 @@ function createInstrumentPanel(prefillEntry) {
       setBusy(false);
       const loadMs = performance.now() - engineLoadStartedAt;
       setEngineStatus(
-        `${engines[engineSelect.value].detail} ready - ${loadMs.toFixed(0)} ms`,
+        `${engineTable()[engineSelect.value].detail} ready - ${loadMs.toFixed(0)} ms`,
         "ready",
       );
       return;
@@ -613,7 +823,7 @@ function createInstrumentPanel(prefillEntry) {
       if (message.requestId !== undefined) {
         setBusy(false);
         errorElement.textContent = message.message;
-        setEngineStatus(`${engines[engineSelect.value].detail} ready`, "ready");
+        setEngineStatus(`${engineTable()[engineSelect.value].detail} ready`, "ready");
       } else {
         showEngineLoadFailure(message.message);
       }
@@ -623,7 +833,12 @@ function createInstrumentPanel(prefillEntry) {
     if (message.type !== "result" || message.requestId !== requestId) return;
 
     setBusy(false);
-    const engine = engines[engineSelect.value];
+    if (pendingExotic) {
+      renderExoticResult(message);
+      return;
+    }
+
+    const engine = engineTable()[engineSelect.value];
     const inputs = pendingInputs;
     const isMonteCarlo = inputs.method === "monte-carlo";
     setEngineStatus(`${engine.detail} ready`, "ready");
@@ -697,12 +912,55 @@ function createInstrumentPanel(prefillEntry) {
     }
   }
 
+  // Exotic workers post a nested {result:{price, standardError, ...}} shape,
+  // never the flat vanilla shape -- kept as a fully separate render path
+  // rather than reconciled into the vanilla one (see plan: response shapes
+  // are irreconcilably different). No distribution charts: no exotic
+  // pricer (JS or native) returns terminal-price/payoff sample arrays.
+  function renderExoticResult(message) {
+    const result = message.result;
+    const config = result.config;
+    const engine = engineTable()[engineSelect.value];
+    setEngineStatus(`${engine.detail} ready`, "ready");
+
+    priceOutput.textContent = ExoticFields.formatNumber(result.price);
+    errorOutput.textContent = result.standardError === null || result.standardError === undefined
+      ? "Deterministic estimate"
+      : `SE ${ExoticFields.formatNumber(result.standardError)} · payoff σ ${ExoticFields.formatNumber(result.standardDeviation)}`;
+    productRow.hidden = false;
+    productOutput.textContent = ExoticFields.productLabels[config.product] || config.product;
+    methodOutput.textContent = ExoticFields.methodLabels[result.method] || result.method;
+    exerciseRow.hidden = true;
+    volatilityModelRow.hidden = false;
+    volatilityModelOutput.textContent = ExoticFields.volatilityLabels[config.volatilityModel] || "—";
+    payoffOutput.textContent = ExoticFields.fallbackDescriptions[config.product] || "—";
+    intervalRow.hidden = true;
+    stdRow.hidden = true;
+    samplingRow.hidden = true;
+    varianceRow.hidden = true;
+    runtimeOutput.textContent = `${result.elapsedMs.toFixed(1)} ms`;
+    engineOutput.textContent = engine.detail;
+    workloadOutput.textContent = ["mc", "qmc"].includes(result.method)
+      ? `${new Intl.NumberFormat("en-US").format(result.samples)} paths`
+      : "Formula evaluation";
+    setResultSummary(ExoticFields.formatNumber(result.price, 4));
+    distributionPanel.hidden = true;
+    latestDistribution = undefined;
+
+    addHistoryEntry(pendingConfig, engineSelect.value, {
+      price: result.price,
+      standardError: result.standardError,
+      standardDeviation: result.standardDeviation,
+      elapsedMs: result.elapsedMs,
+    });
+  }
+
   function handleWorkerError() {
     showEngineLoadFailure("The pricing worker could not start. Click retry to load it again.");
   }
 
   function selectEngine() {
-    const engine = engines[engineSelect.value];
+    const engine = engineTable()[engineSelect.value];
     clearEngineLoadTimer();
     errorElement.textContent = "";
     setResultSummary("—");
@@ -741,6 +999,38 @@ function createInstrumentPanel(prefillEntry) {
       return;
     }
     if (!form.reportValidity()) return;
+
+    if (isExoticPayoff(payoffTypeSelect.value)) {
+      let config;
+      try {
+        config = readExoticConfig();
+      } catch (error) {
+        errorElement.textContent = error.message || String(error);
+        return;
+      }
+      const method = methodSelect.value;
+      requestId += 1;
+      pendingConfig = config;
+      pendingExotic = true;
+      distributionPanel.hidden = true;
+      latestDistribution = undefined;
+      setBusy(true);
+      setEngineStatus(
+        `${engineTable()[engineSelect.value].label} ${ExoticFields.methodLabels[method] || method} running`,
+        "working",
+      );
+      if (engineSelect.value === "js") {
+        worker.postMessage({ type: "price", requestId, method, config });
+      } else {
+        worker.postMessage({
+          type: "price", requestId, method: "mc", config,
+          parameters: PolyglotContract.pack(config),
+          paths: Math.trunc(Number(config.paths)), seed: Math.trunc(Number(config.seed)),
+        });
+      }
+      return;
+    }
+    pendingExotic = false;
 
     const method = methodSelect.value;
     const inputs = {
@@ -808,15 +1098,33 @@ function createInstrumentPanel(prefillEntry) {
     resizeFrame = window.requestAnimationFrame(renderDistribution);
   });
 
-  engineSelect.addEventListener("change", selectEngine);
-  methodSelect.addEventListener("change", updateMethodFields);
+  engineSelect.addEventListener("change", () => {
+    selectEngine();
+    if (isExoticPayoff(payoffTypeSelect.value)) updateExoticMethodOptions();
+  });
+  methodSelect.addEventListener("change", () => {
+    if (isExoticPayoff(payoffTypeSelect.value)) updateExoticMethodFields();
+    else updateMethodFields();
+  });
   exerciseSelect.addEventListener("change", updateMethodOptions);
+  payoffTypeSelect.addEventListener("change", updatePayoffVisibility);
+  volatilityModelSelect.addEventListener("change", () => {
+    renderExoticVolatilityFields();
+    updateExoticMethodOptions();
+  });
+  scheduleModeSelect.addEventListener("change", updateExoticScheduleFields);
 
-  function wireModuleDialog(module) {
+  function wireModuleDialog(module, onRestore) {
     const trigger = root.querySelector(`.module-trigger[data-module="${module}"]`);
     const dialog = root.querySelector(`.module-dialog[data-module="${module}"]`);
     const fields = () => [...dialog.querySelectorAll("input, select")];
     let snapshot = null;
+
+    function restore() {
+      if (!snapshot) return;
+      restoreFieldValues(fields(), snapshot);
+      onRestore?.();
+    }
 
     trigger.addEventListener("click", () => {
       snapshot = captureFieldValues(fields());
@@ -831,28 +1139,30 @@ function createInstrumentPanel(prefillEntry) {
     });
 
     dialog.querySelector(".dialog-cancel").addEventListener("click", () => {
-      if (snapshot) restoreFieldValues(fields(), snapshot);
+      restore();
       dialog.close();
     });
 
     // Escape key: the browser fires "cancel" (default action closes the
     // dialog) before "close" -- restore here so Escape behaves like Cancel.
-    dialog.addEventListener("cancel", () => {
-      if (snapshot) restoreFieldValues(fields(), snapshot);
-    });
+    dialog.addEventListener("cancel", restore);
 
     // Clicking the ::backdrop registers as a click on the <dialog> element
     // itself (outside its content box), so this is also "click outside to
     // cancel" without any extra markup.
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) {
-        if (snapshot) restoreFieldValues(fields(), snapshot);
+        restore();
         dialog.close();
       }
     });
   }
 
-  ["contractual", "asset", "model"].forEach(wireModuleDialog);
+  // "contractual" holds payoffType -- reverting it on Cancel/Escape/backdrop
+  // must also re-sync the toolbar/Model dialog to whatever payoff type was
+  // actually restored, not the tentative one the user was previewing.
+  wireModuleDialog("contractual", updatePayoffVisibility);
+  ["asset", "model", "barrier-terms", "schedule", "basket"].forEach((module) => wireModuleDialog(module));
 
   priceButton.addEventListener("click", () => form.requestSubmit());
   resultTrigger.addEventListener("click", () => {
@@ -870,21 +1180,55 @@ function createInstrumentPanel(prefillEntry) {
     panels.delete(panelId);
   });
 
-  updateMethodOptions();
+  updatePayoffVisibility();
   ["contractual", "asset", "model"].forEach(refreshSummary);
   selectEngine();
 
   const control = {
     root,
     engineSelect,
+    payoffTypeSelect,
     selectEngine,
     updateMethodOptions,
     updateMethodFields,
+    updateExoticMethodOptions,
+    updateExoticMethodFields,
+    updatePayoffVisibility,
     refreshSummary,
   };
   panels.set(panelId, control);
 
-  if (prefillEntry) {
+  if (prefillEntry?.inputs?.exotic) {
+    // Generic re-population by field name -- exotic configs span too many
+    // shapes (18+ products) to hand-map like the vanilla branch below.
+    // form.elements[name] on a radio group returns a RadioNodeList, and
+    // assigning .value to one of those checks the matching radio natively.
+    payoffTypeSelect.value = prefillEntry.inputs.product;
+    updatePayoffVisibility();
+    // readExoticConfig() stores rate/volatility/dividendYield (and the
+    // basket asset 2/3 equivalents) as decimals, but their <input> fields
+    // display percent -- re-multiply on the way back in, or duplicating an
+    // entry silently re-divides by 100 on the next submit.
+    const percentFields = new Set([
+      "rate", "dividendYield", "volatility", "volatility2", "dividendYield2", "volatility3", "dividendYield3",
+    ]);
+    Object.entries(prefillEntry.inputs).forEach(([name, value]) => {
+      const element = form.elements[name];
+      if (!element || value === undefined) return;
+      if (element.type === "checkbox") element.checked = Boolean(value);
+      else if (percentFields.has(name)) element.value = Number(value) * 100;
+      else element.value = Array.isArray(value) ? value.join(",") : value;
+    });
+    engineSelect.value = prefillEntry.engineKey;
+    updateExoticMethodOptions();
+    methodSelect.value = prefillEntry.inputs.method;
+    updateExoticMethodFields();
+    renderExoticVolatilityFields();
+    updateExoticScheduleFields();
+    ["contractual", "asset", "model", "barrier-terms", "schedule", "basket"].forEach(refreshSummary);
+    wasExotic = true;
+    selectEngine();
+  } else if (prefillEntry) {
     const { inputs, engineKey } = prefillEntry;
     root.querySelector(`input[name="optionType"][value="${inputs.optionType}"]`).checked = true;
     form.elements.spot.value = inputs.spot;

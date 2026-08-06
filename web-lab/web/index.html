@@ -7,7 +7,9 @@
     <title>QuantKiller · Polyglot Pricing Lab</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="exotics.css">
-    <script src="app.js?v=11" defer></script>
+    <script src="polyglot-contract.js" defer></script>
+    <script src="exotic-fields.js?v=1" defer></script>
+    <script src="app.js?v=12" defer></script>
   </head>
   <body>
     <main class="page-shell">
@@ -84,6 +86,27 @@
               </span>
               <span class="module-trigger-summary"></span>
             </button>
+            <button type="button" class="module-trigger" data-module="barrier-terms" draggable="true" hidden>
+              <span class="module-trigger-label">
+                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
+                Barrier terms
+              </span>
+              <span class="module-trigger-summary"></span>
+            </button>
+            <button type="button" class="module-trigger" data-module="schedule" draggable="true" hidden>
+              <span class="module-trigger-label">
+                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
+                Schedule
+              </span>
+              <span class="module-trigger-summary"></span>
+            </button>
+            <button type="button" class="module-trigger" data-module="basket" draggable="true" hidden>
+              <span class="module-trigger-label">
+                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
+                Basket / multi-asset
+              </span>
+              <span class="module-trigger-summary"></span>
+            </button>
             <button type="button" class="module-trigger" data-module="asset" draggable="true">
               <span class="module-trigger-label">
                 <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
@@ -106,6 +129,19 @@
 
           <dialog class="module-dialog" data-module="contractual">
             <h3>Contractual info</h3>
+            <div class="form-grid">
+              <label class="field engine-field">
+                Payoff type
+                <select name="payoffType">
+                  <option value="vanilla-european">European vanilla</option>
+                  <option value="vanilla-american">American vanilla</option>
+                  <option value="digital">Digital / binary</option>
+                  <option value="barrier">Single barrier</option>
+                  <option value="asian">Discrete arithmetic Asian</option>
+                  <option value="rainbow">Rainbow / order statistic</option>
+                </select>
+              </label>
+            </div>
             <div class="option-toggle" role="radiogroup" aria-label="Option type">
               <label class="option-toggle-choice">
                 <input type="radio" name="optionType" value="call" checked>
@@ -117,7 +153,7 @@
               </label>
             </div>
             <div class="form-grid">
-              <label class="field">
+              <label class="field" hidden>
                 Exercise style
                 <select name="exerciseStyle">
                   <option value="european">European</option>
@@ -134,6 +170,155 @@
                   <input name="maturity" type="number" min="0.000001" step="any" value="1" required>
                   <span class="suffix">years</span>
                 </div>
+              </label>
+              <label class="field" data-payoff-only="digital" hidden>
+                Cash payoff
+                <input name="cashPayoff" type="number" min="0" step="any" value="10" disabled>
+              </label>
+              <label class="field" data-payoff-only="rainbow" hidden>
+                Order statistic
+                <select name="rainbowStyle" disabled>
+                  <option value="best">Best performer</option>
+                  <option value="worst">Worst performer</option>
+                </select>
+              </label>
+              <label class="field" data-payoff-only="rainbow" hidden>
+                Asset count
+                <select name="assetCount" disabled>
+                  <option value="2">Two</option>
+                  <option value="3">Three</option>
+                </select>
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel">Cancel</button>
+              <button type="button" class="dialog-save">Save</button>
+            </div>
+          </dialog>
+
+          <dialog class="module-dialog" data-module="barrier-terms">
+            <h3>Barrier terms</h3>
+            <div class="form-grid">
+              <label class="field">
+                Barrier level
+                <input name="barrier" type="number" min="0.0001" step="any" value="125" required>
+              </label>
+              <label class="field">
+                Barrier direction
+                <select name="barrierDirection">
+                  <option value="up">Up</option>
+                  <option value="down">Down</option>
+                </select>
+              </label>
+              <label class="field">
+                Barrier style
+                <select name="barrierStyle">
+                  <option value="out">Knock-out</option>
+                  <option value="in">Knock-in</option>
+                </select>
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel">Cancel</button>
+              <button type="button" class="dialog-save">Save</button>
+            </div>
+          </dialog>
+
+          <dialog class="module-dialog" data-module="schedule">
+            <h3>Schedule</h3>
+            <div class="form-grid">
+              <label class="field">
+                Observation count
+                <input name="monitoringSteps" type="number" min="1" max="260" step="1" value="12" required>
+              </label>
+              <label class="field">
+                Observation schedule
+                <select name="scheduleMode">
+                  <option value="equal">Equally spaced</option>
+                  <option value="business-monthly">Monthly business day</option>
+                  <option value="custom">Custom business dates</option>
+                </select>
+              </label>
+              <label class="field" hidden>
+                Valuation date
+                <input name="valuationDate" type="date" value="2026-08-03">
+              </label>
+              <label class="field" hidden>
+                Custom dates · comma separated
+                <input name="observationDates" type="text" value="2026-09-01, 2026-10-15, 2027-01-04, 2027-08-02">
+              </label>
+              <label class="checkbox" data-payoff-only="asian" hidden>
+                <input name="includeInitialFixing" type="checkbox">
+                Include initial spot fixing
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel">Cancel</button>
+              <button type="button" class="dialog-save">Save</button>
+            </div>
+          </dialog>
+
+          <dialog class="module-dialog" data-module="basket">
+            <h3>Basket / multi-asset</h3>
+            <div class="form-grid">
+              <label class="field">
+                Basket asset count
+                <select name="basketAssetCount">
+                  <option value="2">Two</option>
+                  <option value="3" selected>Three</option>
+                </select>
+              </label>
+              <label class="field">
+                Weights · comma separated
+                <input name="basketWeights" type="text" value="0.5,0.3,0.2">
+              </label>
+              <label class="field">
+                Performance order statistic
+                <select name="basketOrder">
+                  <option value="1">1 · best</option>
+                  <option value="2">2 · middle / worst of two</option>
+                  <option value="3">3 · worst of three</option>
+                </select>
+              </label>
+              <label class="field">
+                Asset 2 spot
+                <input name="spot2" type="number" min="0.0001" step="any" value="100">
+              </label>
+              <label class="field">
+                Asset 2 initial volatility
+                <div class="input-wrap">
+                  <input name="volatility2" type="number" min="0.01" step="any" value="25">
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field">
+                Asset 2 dividend yield
+                <div class="input-wrap">
+                  <input name="dividendYield2" type="number" step="any" value="0">
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field">
+                Asset 3 spot
+                <input name="spot3" type="number" min="0.0001" step="any" value="100">
+              </label>
+              <label class="field">
+                Asset 3 initial volatility
+                <div class="input-wrap">
+                  <input name="volatility3" type="number" min="0.01" step="any" value="30">
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field">
+                Asset 3 dividend yield
+                <div class="input-wrap">
+                  <input name="dividendYield3" type="number" step="any" value="0">
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field">
+                Common asset correlation
+                <input name="correlation" type="number" min="-0.49" max="0.99" step="0.01" value="0.35">
               </label>
             </div>
             <div class="dialog-actions">
@@ -242,6 +427,22 @@
                 <input name="showDistribution" type="checkbox">
                 Show terminal-price and payoff distributions
               </label>
+
+              <label class="field engine-field" data-payoff-only="exotic" hidden>
+                Volatility model
+                <select name="volatilityModel" disabled>
+                  <option value="constant">Constant volatility</option>
+                  <option value="term">Linear term volatility</option>
+                  <option value="local">Term + local volatility</option>
+                  <option value="heston">Heston stochastic volatility</option>
+                  <option value="slv">Stochastic local volatility</option>
+                </select>
+              </label>
+              <div class="form-grid exotic-volatility-fields" data-payoff-only="exotic" hidden></div>
+              <label class="checkbox" data-payoff-only="exotic" hidden>
+                <input name="randomizedQmc" type="checkbox" disabled>
+                Randomized Sobol digital shift
+              </label>
             </div>
             <div class="dialog-actions">
               <button type="button" class="dialog-cancel">Cancel</button>
@@ -264,13 +465,21 @@
               <p class="price-output price">—</p>
               <p class="error-output standard-error">—</p>
               <dl class="result-list">
+                <div class="product-row result-row" hidden>
+                  <dt>Payoff type</dt>
+                  <dd class="product-output">—</dd>
+                </div>
                 <div class="result-row">
                   <dt>Pricing method</dt>
                   <dd class="method-output">-</dd>
                 </div>
-                <div class="result-row">
+                <div class="exercise-row result-row">
                   <dt>Exercise style</dt>
                   <dd class="exercise-output">—</dd>
+                </div>
+                <div class="volatility-model-row result-row" hidden>
+                  <dt>Volatility model</dt>
+                  <dd class="volatility-model-output">—</dd>
                 </div>
                 <div class="result-row">
                   <dt>Pricing engine</dt>

@@ -221,6 +221,10 @@ h1 {
   box-shadow: 0 0 0 1.5px var(--accent) inset;
 }
 
+.module-trigger[hidden] {
+  display: none;
+}
+
 .module-trigger-label {
   display: flex;
   align-items: center;
@@ -345,9 +349,17 @@ h1 {
   gap: 18px;
 }
 
+.form-grid[hidden] {
+  display: none;
+}
+
 .field {
   display: grid;
   gap: 8px;
+}
+
+.field[hidden] {
+  display: none;
 }
 
 .engine-field {
@@ -420,6 +432,10 @@ select:focus {
   font-size: 0.88rem;
 }
 
+.checkbox[hidden] {
+  display: none;
+}
+
 .checkbox input {
   width: 18px;
   min-height: 18px;
@@ -451,6 +467,10 @@ button:disabled {
   margin: 14px 0 0;
   color: var(--danger);
   font-size: 0.88rem;
+}
+
+.verify-links[hidden] {
+  display: none;
 }
 
 .verify-links {
@@ -520,6 +540,10 @@ button:disabled {
   gap: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
+}
+
+.result-row[hidden] {
+  display: none;
 }
 
 .result-row dt {
