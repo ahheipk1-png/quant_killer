@@ -64,7 +64,7 @@ h1 {
 }
 
 .intro {
-  max-width: 650px;
+  max-width: 1040px;
   margin: 24px 0 0;
   color: var(--muted);
   font-size: 1.08rem;
