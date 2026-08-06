@@ -70,186 +70,192 @@
           <button type="button" class="instrument-remove" aria-label="Remove this instrument">×</button>
         </div>
 
-        <div class="engine-line panel-engine-line" hidden>
+        <div class="engine-line panel-engine-line">
           <span class="engine-dot" aria-hidden="true"></span>
           <span class="engine-status" data-state="working">Loading engine…</span>
         </div>
 
         <form class="pricing-form">
-          <div class="wizard-step" data-module="option-type" data-state="active">
-            <p class="wizard-step-label">
-              <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-              What are you pricing?
-            </p>
-            <div class="wizard-step-body">
-              <div class="option-toggle" role="radiogroup" aria-label="Option type">
-                <label class="option-toggle-choice">
-                  <input type="radio" name="optionType" value="call" checked>
-                  <span>Call</span>
-                </label>
-                <label class="option-toggle-choice">
-                  <input type="radio" name="optionType" value="put">
-                  <span>Put</span>
-                </label>
-              </div>
-            </div>
-            <p class="wizard-step-summary"></p>
+          <div class="module-toolbar">
+            <button type="button" class="module-trigger" data-module="contractual" draggable="true">
+              <span class="module-trigger-label">
+                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
+                Contractual info
+              </span>
+              <span class="module-trigger-summary"></span>
+            </button>
+            <button type="button" class="module-trigger" data-module="asset" draggable="true">
+              <span class="module-trigger-label">
+                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
+                Underlying asset(s)
+              </span>
+              <span class="module-trigger-summary"></span>
+            </button>
+            <button type="button" class="module-trigger" data-module="model" draggable="true">
+              <span class="module-trigger-label">
+                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
+                Model
+              </span>
+              <span class="module-trigger-summary"></span>
+            </button>
           </div>
 
-          <div class="wizard-step" data-module="asset" data-state="upcoming" hidden>
-            <p class="wizard-step-label">
-              <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-              Underlying asset(s)
-            </p>
-            <div class="wizard-step-body">
-              <div class="form-grid">
-                <label class="field">
-                  Spot price
-                  <input name="spot" type="number" min="0.000001" step="any" value="100" required>
-                </label>
-                <label class="field">
-                  Volatility
-                  <div class="input-wrap">
-                    <input name="volatility" type="number" min="0" step="any" value="20" required>
-                    <span class="suffix">%</span>
-                  </div>
-                </label>
-                <label class="field">
-                  Dividend yield
-                  <div class="input-wrap">
-                    <input name="dividendYield" type="number" step="any" value="0" required>
-                    <span class="suffix">%</span>
-                  </div>
-                </label>
-                <label class="field">
-                  Risk-free rate
-                  <div class="input-wrap">
-                    <input name="rate" type="number" step="any" value="5" required>
-                    <span class="suffix">%</span>
-                  </div>
-                </label>
-              </div>
-              <button type="button" class="wizard-continue" data-next="contractual">Continue</button>
+          <dialog class="module-dialog" data-module="contractual">
+            <h3>Contractual info</h3>
+            <div class="option-toggle" role="radiogroup" aria-label="Option type">
+              <label class="option-toggle-choice">
+                <input type="radio" name="optionType" value="call" checked>
+                <span>Call</span>
+              </label>
+              <label class="option-toggle-choice">
+                <input type="radio" name="optionType" value="put">
+                <span>Put</span>
+              </label>
             </div>
-            <p class="wizard-step-summary"></p>
-          </div>
-
-          <div class="wizard-step" data-module="contractual" data-state="upcoming" hidden>
-            <p class="wizard-step-label">
-              <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-              Contractual info
-            </p>
-            <div class="wizard-step-body">
-              <div class="form-grid">
-                <label class="field">
-                  Exercise style
-                  <select name="exerciseStyle">
-                    <option value="european">European</option>
-                    <option value="american">American</option>
-                  </select>
-                </label>
-                <label class="field">
-                  Strike price
-                  <input name="strike" type="number" min="0.000001" step="any" value="100" required>
-                </label>
-                <label class="field">
-                  Time to maturity
-                  <div class="input-wrap">
-                    <input name="maturity" type="number" min="0.000001" step="any" value="1" required>
-                    <span class="suffix">years</span>
-                  </div>
-                </label>
-              </div>
-              <button type="button" class="wizard-continue" data-next="model">Continue</button>
+            <div class="form-grid">
+              <label class="field">
+                Exercise style
+                <select name="exerciseStyle">
+                  <option value="european">European</option>
+                  <option value="american">American</option>
+                </select>
+              </label>
+              <label class="field">
+                Strike price
+                <input name="strike" type="number" min="0.000001" step="any" value="100" required>
+              </label>
+              <label class="field">
+                Time to maturity
+                <div class="input-wrap">
+                  <input name="maturity" type="number" min="0.000001" step="any" value="1" required>
+                  <span class="suffix">years</span>
+                </div>
+              </label>
             </div>
-            <p class="wizard-step-summary"></p>
-          </div>
-
-          <div class="wizard-step" data-module="model" data-state="upcoming" hidden>
-            <p class="wizard-step-label">
-              <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
-              Model
-            </p>
-            <div class="wizard-step-body">
-              <div class="form-grid">
-                <label class="field engine-field">
-                  Pricing language
-                  <select name="engine">
-                    <option value="cpp">C++ · WebAssembly</option>
-                    <option value="python">Python · Pyodide</option>
-                    <option value="rust">Rust · WebAssembly</option>
-                    <option value="csharp">C# · .NET WebAssembly</option>
-                  </select>
-                </label>
-
-                <label class="field engine-field">
-                  Pricing method
-                  <select name="method">
-                    <option value="monte-carlo">Monte Carlo simulation</option>
-                    <option value="closed-form">Black-Scholes closed form</option>
-                    <option value="binomial">CRR binomial tree</option>
-                  </select>
-                </label>
-
-                <label class="field" data-method-only="monte-carlo" hidden>
-                  Monte Carlo paths
-                  <input name="paths" type="number" min="2" max="2000000" step="1" value="100000" required>
-                </label>
-
-                <label class="field" data-method-only="monte-carlo" hidden>
-                  Random seed
-                  <input name="seed" type="number" min="0" max="4294967295" step="1" value="42" required>
-                </label>
-
-                <label class="field" data-method-only="monte-carlo" hidden>
-                  Sampling sequence
-                  <select name="sampling">
-                    <option value="pcg">Pseudo-random · PCG32</option>
-                    <option value="sobol">QMC · Sobol</option>
-                    <option value="rqmc">Randomized QMC · Sobol (8 shifts)</option>
-                  </select>
-                </label>
-
-                <label class="field" data-method-only="monte-carlo" hidden>
-                  Variance control
-                  <select name="varianceReduction">
-                    <option value="none">None</option>
-                    <option value="antithetic" selected>Antithetic variates</option>
-                    <option value="control">Discounted-stock control variate</option>
-                    <option value="antithetic-control">Antithetic + control variate</option>
-                  </select>
-                </label>
-
-                <label class="field" data-method-only="binomial" hidden>
-                  Binomial steps
-                  <input name="steps" type="number" min="1" max="2000" step="1" value="500" required disabled>
-                </label>
-
-                <label class="field" data-method-only="carr-randomization" hidden>
-                  Carr Erlang phases
-                  <input name="carrPhases" type="number" min="4" max="256" step="1" value="32" required disabled>
-                </label>
-              </div>
-
-              <div class="form-footer">
-                <label class="checkbox" data-method-only="monte-carlo" hidden>
-                  <input name="showDistribution" type="checkbox">
-                  Show terminal-price and payoff distributions
-                </label>
-                <button type="submit" class="price-button" disabled>Loading engine…</button>
-              </div>
-
-              <div class="verify-links">
-                <span class="verify-links-label">Verify this model</span>
-                <a class="verify-source-link" href="code.html?model=black_scholes" target="_blank" rel="noopener">Source code</a>
-                <a href="polyglot-conformance.html" target="_blank" rel="noopener">Four-language conformance</a>
-                <a href="payoff-tests.html" target="_blank" rel="noopener">Test report</a>
-              </div>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel">Cancel</button>
+              <button type="button" class="dialog-save">Save</button>
             </div>
-            <p class="wizard-step-summary"></p>
-          </div>
+          </dialog>
 
+          <dialog class="module-dialog" data-module="asset">
+            <h3>Underlying asset(s)</h3>
+            <div class="form-grid">
+              <label class="field">
+                Spot price
+                <input name="spot" type="number" min="0.000001" step="any" value="100" required>
+              </label>
+              <label class="field">
+                Volatility
+                <div class="input-wrap">
+                  <input name="volatility" type="number" min="0" step="any" value="20" required>
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field">
+                Dividend yield
+                <div class="input-wrap">
+                  <input name="dividendYield" type="number" step="any" value="0" required>
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field">
+                Risk-free rate
+                <div class="input-wrap">
+                  <input name="rate" type="number" step="any" value="5" required>
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel">Cancel</button>
+              <button type="button" class="dialog-save">Save</button>
+            </div>
+          </dialog>
+
+          <dialog class="module-dialog" data-module="model">
+            <h3>Model</h3>
+            <div class="form-grid">
+              <label class="field engine-field">
+                Pricing language
+                <select name="engine">
+                  <option value="cpp">C++ · WebAssembly</option>
+                  <option value="python">Python · Pyodide</option>
+                  <option value="rust">Rust · WebAssembly</option>
+                  <option value="csharp">C# · .NET WebAssembly</option>
+                </select>
+              </label>
+
+              <label class="field engine-field">
+                Pricing method
+                <select name="method">
+                  <option value="monte-carlo">Monte Carlo simulation</option>
+                  <option value="closed-form">Black-Scholes closed form</option>
+                  <option value="binomial">CRR binomial tree</option>
+                </select>
+              </label>
+
+              <label class="field" data-method-only="monte-carlo" hidden>
+                Monte Carlo paths
+                <input name="paths" type="number" min="2" max="2000000" step="1" value="100000" required>
+              </label>
+
+              <label class="field" data-method-only="monte-carlo" hidden>
+                Random seed
+                <input name="seed" type="number" min="0" max="4294967295" step="1" value="42" required>
+              </label>
+
+              <label class="field" data-method-only="monte-carlo" hidden>
+                Sampling sequence
+                <select name="sampling">
+                  <option value="pcg">Pseudo-random · PCG32</option>
+                  <option value="sobol">QMC · Sobol</option>
+                  <option value="rqmc">Randomized QMC · Sobol (8 shifts)</option>
+                </select>
+              </label>
+
+              <label class="field" data-method-only="monte-carlo" hidden>
+                Variance control
+                <select name="varianceReduction">
+                  <option value="none">None</option>
+                  <option value="antithetic" selected>Antithetic variates</option>
+                  <option value="control">Discounted-stock control variate</option>
+                  <option value="antithetic-control">Antithetic + control variate</option>
+                </select>
+              </label>
+
+              <label class="field" data-method-only="binomial" hidden>
+                Binomial steps
+                <input name="steps" type="number" min="1" max="2000" step="1" value="500" required disabled>
+              </label>
+
+              <label class="field" data-method-only="carr-randomization" hidden>
+                Carr Erlang phases
+                <input name="carrPhases" type="number" min="4" max="256" step="1" value="32" required disabled>
+              </label>
+
+              <label class="checkbox" data-method-only="monte-carlo" hidden>
+                <input name="showDistribution" type="checkbox">
+                Show terminal-price and payoff distributions
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel">Cancel</button>
+              <button type="button" class="dialog-save">Save</button>
+            </div>
+          </dialog>
+
+          <div class="form-footer">
+            <button type="submit" class="price-button" disabled>Loading engine…</button>
+          </div>
           <p class="form-error" role="alert"></p>
+
+          <div class="verify-links">
+            <span class="verify-links-label">Verify this model</span>
+            <a class="verify-source-link" href="code.html?model=black_scholes" target="_blank" rel="noopener">Source code</a>
+            <a href="polyglot-conformance.html" target="_blank" rel="noopener">Four-language conformance</a>
+            <a href="payoff-tests.html" target="_blank" rel="noopener">Test report</a>
+          </div>
         </form>
 
         <div class="result-panel" hidden>

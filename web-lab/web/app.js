@@ -80,8 +80,6 @@ const SOURCE_MODEL_BY_METHOD = {
   "monte-carlo": "monte_carlo",
 };
 
-const WIZARD_ORDER = ["option-type", "asset", "contractual", "model"];
-
 // ===================== Shared generic helpers =====================
 
 function formatNumber(value, digits = 6) {
@@ -397,17 +395,18 @@ historyClearButton.addEventListener("click", () => {
 
 // ===================== Instrument panels =====================
 //
-// The homepage starts empty. "+ Instrument" clones the <template> below
-// and walks the user through a 4-step wizard (option type -> underlying
-// asset(s) -> contractual info -> model), one step revealed at a time.
-// Answered steps collapse to a one-line summary but keep their real
-// <input>/<select> elements in the DOM (just visually hidden) so the
-// eventual form submit can still read every field, and so a value copied
-// in by drag-and-drop has somewhere to land even in a collapsed step.
+// The homepage starts empty. "+ Instrument" clones the <template> below:
+// one row per instrument, with 3 collapsed module buttons (Contractual
+// info, Underlying asset(s), Model). Every field already has a sane
+// default, so Calculate works immediately -- clicking a module button
+// just opens a <dialog> to review or change that module's values; Save
+// commits and updates the button's summary line, Cancel (or Escape, or
+// clicking the backdrop) discards the edit and restores what was there
+// before the dialog opened.
 //
 // Any number of instruments can be open at once; each gets its own Worker
 // (no sharing) so two panels never race on the same in-flight request.
-// Dragging a module's handle from one instrument onto the matching module
+// Dragging a module button from one instrument onto the matching button
 // in another copies just that module's field values across.
 
 const instrumentsList = document.querySelector("#instruments-list");
@@ -421,11 +420,14 @@ function engineLabelFor(root) {
   return engines[engineKey].label;
 }
 
-function summarizeStep(step) {
-  const module = step.dataset.module;
-  const q = (name) => step.querySelector(`[name="${name}"]`);
-  if (module === "option-type") {
-    return step.querySelector('input[name="optionType"]:checked').value === "call" ? "Call" : "Put";
+function summarizeModule(root, module) {
+  const dialog = root.querySelector(`.module-dialog[data-module="${module}"]`);
+  const q = (name) => dialog.querySelector(`[name="${name}"]`);
+  if (module === "contractual") {
+    const type = dialog.querySelector('input[name="optionType"]:checked').value === "call" ? "Call" : "Put";
+    const exercise = q("exerciseStyle").value === "american" ? "American" : "European";
+    return `${type} · ${exercise} · Strike ${formatNumber(Number(q("strike").value), 2)} · `
+      + `${formatNumber(Number(q("maturity").value), 4)} yr`;
   }
   if (module === "asset") {
     return `Spot ${formatNumber(Number(q("spot").value), 2)} · `
@@ -433,43 +435,30 @@ function summarizeStep(step) {
       + `Div ${formatNumber(Number(q("dividendYield").value), 2)}% · `
       + `Rate ${formatNumber(Number(q("rate").value), 2)}%`;
   }
-  if (module === "contractual") {
-    const exercise = q("exerciseStyle").value === "american" ? "American" : "European";
-    return `${exercise} · Strike ${formatNumber(Number(q("strike").value), 2)} · `
-      + `${formatNumber(Number(q("maturity").value), 4)} yr`;
-  }
   if (module === "model") {
-    const root = step.closest("[data-panel]");
     return `${engineLabelFor(root)} · ${methods[q("method").value].label}`;
   }
   return "";
 }
 
-function setStepState(step, state) {
-  step.dataset.state = state;
-  step.hidden = state === "upcoming";
-  if (state === "answered") {
-    step.querySelector(".wizard-step-summary").textContent = summarizeStep(step);
-  }
+function captureFieldValues(fields) {
+  return fields.map((field) => (
+    field.type === "checkbox" || field.type === "radio" ? field.checked : field.value
+  ));
 }
 
-function advanceStep(panelRoot, fromModule, toModule) {
-  const fromStep = panelRoot.querySelector(`.wizard-step[data-module="${fromModule}"]`);
-  setStepState(fromStep, "answered");
-  const toStep = panelRoot.querySelector(`.wizard-step[data-module="${toModule}"]`);
-  setStepState(toStep, "active");
-  const panel = panels.get(panelRoot.dataset.panel);
-  if (toModule === "model" && panel && !panel.engineLoadStarted) {
-    panel.engineLoadStarted = true;
-    panel.selectEngine();
-  }
+function restoreFieldValues(fields, snapshot) {
+  fields.forEach((field, index) => {
+    if (field.type === "checkbox" || field.type === "radio") field.checked = snapshot[index];
+    else field.value = snapshot[index];
+  });
 }
 
-function validateStep(step) {
-  const inputs = [...step.querySelectorAll("input, select")].filter((el) => !el.disabled);
-  for (const el of inputs) {
-    if (!el.checkValidity()) {
-      el.reportValidity();
+function validateFields(fields) {
+  for (const field of fields) {
+    if (field.disabled) continue;
+    if (!field.checkValidity()) {
+      field.reportValidity();
       return false;
     }
   }
@@ -486,7 +475,6 @@ function createInstrumentPanel(prefillEntry) {
   const form = root.querySelector(".pricing-form");
   const priceButton = root.querySelector(".price-button");
   const statusElement = root.querySelector(".engine-status");
-  const engineLine = root.querySelector(".panel-engine-line");
   const errorElement = root.querySelector(".form-error");
   const resultPanel = root.querySelector(".result-panel");
   const distributionPanel = root.querySelector(".distribution-panel");
@@ -527,9 +515,13 @@ function createInstrumentPanel(prefillEntry) {
   let resizeFrame;
 
   function setEngineStatus(label, state) {
-    engineLine.hidden = false;
     statusElement.textContent = label;
     statusElement.dataset.state = state;
+  }
+
+  function refreshSummary(module) {
+    root.querySelector(`.module-trigger[data-module="${module}"] .module-trigger-summary`).textContent =
+      summarizeModule(root, module);
   }
 
   function setBusy(isBusy) {
@@ -559,10 +551,7 @@ function createInstrumentPanel(prefillEntry) {
       sourceLink.href = `code.html?model=${model}`;
     }
 
-    const modelStep = form.querySelector('.wizard-step[data-module="model"]');
-    if (modelStep.dataset.state === "answered") {
-      modelStep.querySelector(".wizard-step-summary").textContent = summarizeStep(modelStep);
-    }
+    refreshSummary("model");
   }
 
   function updateMethodOptions() {
@@ -821,30 +810,47 @@ function createInstrumentPanel(prefillEntry) {
   methodSelect.addEventListener("change", updateMethodFields);
   exerciseSelect.addEventListener("change", updateMethodOptions);
 
-  root.querySelectorAll('input[name="optionType"]').forEach((radio) => {
-    radio.addEventListener("click", () => {
-      const step = form.querySelector('.wizard-step[data-module="option-type"]');
-      if (step.dataset.state === "active") advanceStep(root, "option-type", "asset");
-      else if (step.dataset.state === "answered") {
-        step.querySelector(".wizard-step-summary").textContent = summarizeStep(step);
+  function wireModuleDialog(module) {
+    const trigger = root.querySelector(`.module-trigger[data-module="${module}"]`);
+    const dialog = root.querySelector(`.module-dialog[data-module="${module}"]`);
+    const fields = () => [...dialog.querySelectorAll("input, select")];
+    let snapshot = null;
+
+    trigger.addEventListener("click", () => {
+      snapshot = captureFieldValues(fields());
+      dialog.showModal();
+    });
+
+    dialog.querySelector(".dialog-save").addEventListener("click", () => {
+      if (!validateFields(fields())) return;
+      snapshot = null;
+      dialog.close();
+      refreshSummary(module);
+    });
+
+    dialog.querySelector(".dialog-cancel").addEventListener("click", () => {
+      if (snapshot) restoreFieldValues(fields(), snapshot);
+      dialog.close();
+    });
+
+    // Escape key: the browser fires "cancel" (default action closes the
+    // dialog) before "close" -- restore here so Escape behaves like Cancel.
+    dialog.addEventListener("cancel", () => {
+      if (snapshot) restoreFieldValues(fields(), snapshot);
+    });
+
+    // Clicking the ::backdrop registers as a click on the <dialog> element
+    // itself (outside its content box), so this is also "click outside to
+    // cancel" without any extra markup.
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) {
+        if (snapshot) restoreFieldValues(fields(), snapshot);
+        dialog.close();
       }
     });
-  });
+  }
 
-  form.querySelectorAll(".wizard-continue").forEach((button) => {
-    button.addEventListener("click", () => {
-      const step = button.closest(".wizard-step");
-      if (!validateStep(step)) return;
-      advanceStep(root, step.dataset.module, button.dataset.next);
-    });
-  });
-
-  form.querySelectorAll(".wizard-step-summary").forEach((summary) => {
-    summary.addEventListener("click", () => {
-      const step = summary.closest(".wizard-step");
-      setStepState(step, "active");
-    });
-  });
+  ["contractual", "asset", "model"].forEach(wireModuleDialog);
 
   removeButton.addEventListener("click", () => {
     if (worker) worker.terminate();
@@ -853,6 +859,8 @@ function createInstrumentPanel(prefillEntry) {
   });
 
   updateMethodOptions();
+  ["contractual", "asset", "model"].forEach(refreshSummary);
+  selectEngine();
 
   const control = {
     root,
@@ -860,7 +868,7 @@ function createInstrumentPanel(prefillEntry) {
     selectEngine,
     updateMethodOptions,
     updateMethodFields,
-    engineLoadStarted: false,
+    refreshSummary,
   };
   panels.set(panelId, control);
 
@@ -890,11 +898,7 @@ function createInstrumentPanel(prefillEntry) {
       form.elements.carrPhases.value = inputs.carrPhases;
     }
 
-    ["option-type", "asset", "contractual"].forEach((module) => {
-      setStepState(form.querySelector(`.wizard-step[data-module="${module}"]`), "answered");
-    });
-    setStepState(form.querySelector('.wizard-step[data-module="model"]'), "active");
-    control.engineLoadStarted = true;
+    ["contractual", "asset", "model"].forEach(refreshSummary);
     selectEngine();
   }
 
@@ -904,15 +908,21 @@ function createInstrumentPanel(prefillEntry) {
 
 // ===================== Drag-and-drop module copy =====================
 //
-// Each wizard step doubles as a drop target for its module type. Dragging
-// a module's handle from one instrument onto the same module in another
-// (only steps that are currently visible -- active or answered -- can be
-// drop targets, since a hidden/upcoming step can't receive pointer events)
-// copies just that module's field values across.
+// Each module button is always visible (nothing is hidden behind a
+// wizard anymore), so it doubles as both the drag source and the drop
+// target for its module type. Dragging one instrument's "Model" button
+// onto another instrument's "Model" button copies the underlying
+// <dialog>'s field values across and refreshes the target's summary.
 
-function copyModuleValues(sourceStep, targetStep, targetPanelId) {
-  const sourceFields = [...sourceStep.querySelectorAll("input, select")];
-  const targetFields = [...targetStep.querySelectorAll("input, select")];
+function copyModuleValues(sourcePanelId, module, targetRoot) {
+  const sourceDialog = document.querySelector(
+    `[data-panel="${sourcePanelId}"] .module-dialog[data-module="${module}"]`,
+  );
+  const targetDialog = targetRoot.querySelector(`.module-dialog[data-module="${module}"]`);
+  if (!sourceDialog || !targetDialog) return;
+
+  const sourceFields = [...sourceDialog.querySelectorAll("input, select")];
+  const targetFields = [...targetDialog.querySelectorAll("input, select")];
   sourceFields.forEach((sourceField, index) => {
     const targetField = targetFields[index];
     if (!targetField) return;
@@ -923,64 +933,50 @@ function copyModuleValues(sourceStep, targetStep, targetPanelId) {
     }
   });
 
-  const targetControl = panels.get(targetPanelId);
+  const targetControl = panels.get(targetRoot.dataset.panel);
   if (!targetControl) return;
-  const module = targetStep.dataset.module;
   if (module === "contractual") {
     targetControl.updateMethodOptions();
   } else if (module === "model") {
-    const sourceEngine = sourceStep.querySelector('[name="engine"]')?.value;
+    const sourceEngine = sourceDialog.querySelector('[name="engine"]')?.value;
     if (sourceEngine && targetControl.engineSelect.value !== sourceEngine) {
       targetControl.engineSelect.value = sourceEngine;
-      targetControl.engineLoadStarted = true;
       targetControl.selectEngine();
     }
     targetControl.updateMethodFields();
-  } else if (module === "option-type") {
-    // No dependent state to refresh.
   }
-
-  if (targetStep.dataset.state === "answered") {
-    targetStep.querySelector(".wizard-step-summary").textContent = summarizeStep(targetStep);
-  }
+  targetControl.refreshSummary(module);
 }
 
 instrumentsList.addEventListener("dragstart", (event) => {
-  const handle = event.target.closest(".module-drag-handle");
-  if (!handle) return;
-  const step = handle.closest(".wizard-step");
-  const panelRoot = handle.closest("[data-panel]");
-  event.dataTransfer.setData("text/plain", `${panelRoot.dataset.panel}|${step.dataset.module}`);
+  const trigger = event.target.closest(".module-trigger");
+  if (!trigger) return;
+  const panelRoot = trigger.closest("[data-panel]");
+  event.dataTransfer.setData("text/plain", `${panelRoot.dataset.panel}|${trigger.dataset.module}`);
   event.dataTransfer.effectAllowed = "copy";
 });
 
 instrumentsList.addEventListener("dragover", (event) => {
-  const step = event.target.closest(".wizard-step[data-module]");
-  if (!step) return;
+  const trigger = event.target.closest(".module-trigger");
+  if (!trigger) return;
   event.preventDefault();
   event.dataTransfer.dropEffect = "copy";
-  step.classList.add("drag-target");
+  trigger.classList.add("drag-target");
 });
 
 instrumentsList.addEventListener("dragleave", (event) => {
-  const step = event.target.closest(".wizard-step[data-module]");
-  step?.classList.remove("drag-target");
+  event.target.closest(".module-trigger")?.classList.remove("drag-target");
 });
 
 instrumentsList.addEventListener("drop", (event) => {
-  const targetStep = event.target.closest(".wizard-step[data-module]");
-  if (!targetStep) return;
+  const trigger = event.target.closest(".module-trigger");
+  if (!trigger) return;
   event.preventDefault();
-  targetStep.classList.remove("drag-target");
+  trigger.classList.remove("drag-target");
   const [sourcePanelId, module] = event.dataTransfer.getData("text/plain").split("|");
-  const targetPanelRoot = targetStep.closest("[data-panel]");
-  const targetPanelId = targetPanelRoot.dataset.panel;
-  if (sourcePanelId === targetPanelId || module !== targetStep.dataset.module) return;
-  const sourceStep = document.querySelector(
-    `[data-panel="${sourcePanelId}"] .wizard-step[data-module="${module}"]`,
-  );
-  if (!sourceStep) return;
-  copyModuleValues(sourceStep, targetStep, targetPanelId);
+  const targetRoot = trigger.closest("[data-panel]");
+  if (sourcePanelId === targetRoot.dataset.panel || module !== trigger.dataset.module) return;
+  copyModuleValues(sourcePanelId, module, targetRoot);
 });
 
 // ===================== Boot =====================
