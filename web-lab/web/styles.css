@@ -261,6 +261,8 @@ h1 {
   color: var(--text);
   padding: 26px;
   width: min(480px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
 }
 
 .result-dialog {

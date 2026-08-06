@@ -999,9 +999,24 @@ function createInstrumentPanel(prefillEntry) {
     varianceRow.hidden = true;
     runtimeOutput.textContent = `${result.elapsedMs.toFixed(1)} ms`;
     engineOutput.textContent = engine.detail;
-    workloadOutput.textContent = ["mc", "qmc"].includes(result.method)
-      ? `${new Intl.NumberFormat("en-US").format(result.samples)} paths`
-      : "Formula evaluation";
+    // Simpler than exotics.js's own workload text for pde/adi (it reports
+    // the configured spot/time grid size) -- this UI has no PDE-grid
+    // fields at all yet (pde-* methods are JS-engine-only here, using the
+    // pricer's built-in default grid), so a grid-dimension readout would
+    // just be undefined values. A known, explicit gap, not silently hidden.
+    if (result.method === "mc" || result.method === "qmc") {
+      workloadOutput.textContent = `${new Intl.NumberFormat("en-US").format(result.samples)} paths`;
+    } else if (result.method === "tree") {
+      workloadOutput.textContent = "CRR exercise tree";
+    } else if (result.method === "pde" || result.method === "adi" || result.method.startsWith("pde-")) {
+      workloadOutput.textContent = "Finite-difference PDE, default grid";
+    } else if (result.method === "semi-closed") {
+      workloadOutput.textContent = "Semi-closed spectral series";
+    } else if (result.method === "static-replication") {
+      workloadOutput.textContent = "Static OTM option replication";
+    } else {
+      workloadOutput.textContent = "Closed-form / moment matching";
+    }
     setResultSummary(ExoticFields.formatNumber(result.price, 4));
     distributionPanel.hidden = true;
     latestDistribution = undefined;
