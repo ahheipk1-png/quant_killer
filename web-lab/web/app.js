@@ -72,13 +72,15 @@ const varianceLabels = {
 };
 
 // Maps the "Pricing method" dropdown to the matching model group on the
-// Source code page, so each panel's "Verify this model" link always points
-// at the code for whatever's actually selected, not a fixed default.
+// Source code page, so each instrument's "Verify this model" link always
+// points at the code for whatever's actually selected.
 const SOURCE_MODEL_BY_METHOD = {
   "closed-form": "black_scholes",
   binomial: "binomial",
   "monte-carlo": "monte_carlo",
 };
+
+const WIZARD_ORDER = ["option-type", "asset", "contractual", "model"];
 
 // ===================== Shared generic helpers =====================
 
@@ -216,22 +218,17 @@ function drawPayoffFunction(canvas, inputs, terminalPrices) {
 
 // ===================== Shared: pricing history =====================
 //
-// One history strip, fed by every panel. Every successful price becomes a
-// compact card: hover shows the full input set via a tooltip, "Duplicate"
-// copies those inputs into panel 1 (the primary panel -- dragging a module
-// between panels is the tool for getting values into panel 2, see below),
-// and double-click opens a full-detail view in a new window (Blob + object
-// URL, no server involved).
+// One history strip, fed by every instrument. Every successful price
+// becomes a compact card: hover shows the full input set via a tooltip,
+// "Duplicate" spins up a brand-new, fully pre-filled instrument (so you
+// can tweak one field and compare), and double-click opens a full-detail
+// view in a new window (Blob + object URL, no server involved).
 
 const historyList = document.querySelector("#history-list");
 const historyEmpty = document.querySelector("#history-empty");
 const historyClearButton = document.querySelector("#history-clear");
 let historyIdCounter = 0;
 const historyEntries = [];
-
-// Populated as each panel initializes; keyed by its id suffix ("" for the
-// primary panel, "-2" for the comparison panel).
-const panels = {};
 
 function inputSummaryRows(entry) {
   const { inputs, engineKey, result } = entry;
@@ -302,12 +299,6 @@ function removeHistoryEntry(id) {
   updateHistoryEmptyState();
 }
 
-function duplicateHistoryEntry(entry) {
-  const primary = panels[""];
-  if (!primary) return;
-  primary.applyEntry(entry);
-}
-
 function openHistoryDetail(entry) {
   const rows = inputSummaryRows(entry)
     .map(([label, value]) => `<tr><th>${label}</th><td>${value}</td></tr>`)
@@ -352,12 +343,12 @@ function renderHistoryChip(entry) {
   const duplicateButton = document.createElement("button");
   duplicateButton.type = "button";
   duplicateButton.className = "chip-duplicate";
-  duplicateButton.title = "Duplicate into form";
-  duplicateButton.setAttribute("aria-label", "Duplicate this run into the form");
+  duplicateButton.title = "Duplicate into a new instrument";
+  duplicateButton.setAttribute("aria-label", "Duplicate this run into a new instrument");
   duplicateButton.textContent = "⧉";
   duplicateButton.addEventListener("click", (event) => {
     event.stopPropagation();
-    duplicateHistoryEntry(entry);
+    createInstrumentPanel(entry);
   });
 
   const priceLabel = document.createElement("span");
@@ -404,50 +395,127 @@ historyClearButton.addEventListener("click", () => {
   updateHistoryEmptyState();
 });
 
-// ===================== Panel factory =====================
+// ===================== Instrument panels =====================
 //
-// Everything about one instrument -- its form, its engine worker, its
-// result panel -- lives in one closure so a second, fully independent
-// panel is just a second call to this function against a second set of
-// (id-suffixed) DOM elements. Panels don't share a worker: picking the
-// same engine in both loads it twice, which is simpler and safer than
-// routing shared-worker responses to the right panel, at the cost of a
-// second WASM/Pyodide load (typically served from cache after the first).
+// The homepage starts empty. "+ Instrument" clones the <template> below
+// and walks the user through a 4-step wizard (option type -> underlying
+// asset(s) -> contractual info -> model), one step revealed at a time.
+// Answered steps collapse to a one-line summary but keep their real
+// <input>/<select> elements in the DOM (just visually hidden) so the
+// eventual form submit can still read every field, and so a value copied
+// in by drag-and-drop has somewhere to land even in a collapsed step.
+//
+// Any number of instruments can be open at once; each gets its own Worker
+// (no sharing) so two panels never race on the same in-flight request.
+// Dragging a module's handle from one instrument onto the matching module
+// in another copies just that module's field values across.
 
-function initPricingPanel(suffix, { hasDistribution = false } = {}) {
-  const q = (selector) => document.querySelector(`${selector}${suffix}`);
+const instrumentsList = document.querySelector("#instruments-list");
+const addInstrumentButton = document.querySelector("#add-instrument-button");
+const instrumentTemplate = document.querySelector("#instrument-template");
+const panels = new Map();
+let panelIdCounter = 0;
 
-  const form = q("#pricing-form");
-  const engineSelect = q("#engine");
-  const methodSelect = q("#method");
-  const exerciseSelect = q("#exercise-style");
-  const priceButton = q("#price-button");
-  const statusElement = q("#engine-status");
-  const errorElement = q("#form-error");
-  const resultPanel = q("#result-panel");
-  const distributionPanel = hasDistribution ? q("#distribution-panel") : null;
-  const sourceLink = q("#verify-source-link");
+function engineLabelFor(root) {
+  const engineKey = root.querySelector('[name="engine"]').value;
+  return engines[engineKey].label;
+}
 
-  const priceOutput = q("#price-output");
-  const errorOutput = q("#error-output");
-  const intervalOutput = q("#interval-output");
-  const intervalRow = q("#interval-row");
-  const stdOutput = q("#std-output");
-  const stdRow = q("#std-row");
-  const samplingOutput = q("#sampling-output");
-  const samplingRow = q("#sampling-row");
-  const varianceOutput = q("#variance-output");
-  const varianceRow = q("#variance-row");
-  const runtimeOutput = q("#runtime-output");
-  const workloadOutput = q("#workload-output");
-  const engineOutput = q("#engine-output");
-  const methodOutput = q("#method-output");
-  const exerciseOutput = q("#exercise-output");
-  const payoffOutput = q("#payoff-output");
-  const payoffChartTitle = hasDistribution ? q("#payoff-chart-title") : null;
-  const terminalChart = hasDistribution ? q("#terminal-chart") : null;
-  const payoffChart = hasDistribution ? q("#payoff-chart") : null;
-  const payoffFunctionChart = hasDistribution ? q("#payoff-function-chart") : null;
+function summarizeStep(step) {
+  const module = step.dataset.module;
+  const q = (name) => step.querySelector(`[name="${name}"]`);
+  if (module === "option-type") {
+    return step.querySelector('input[name="optionType"]:checked').value === "call" ? "Call" : "Put";
+  }
+  if (module === "asset") {
+    return `Spot ${formatNumber(Number(q("spot").value), 2)} · `
+      + `Vol ${formatNumber(Number(q("volatility").value), 2)}% · `
+      + `Div ${formatNumber(Number(q("dividendYield").value), 2)}% · `
+      + `Rate ${formatNumber(Number(q("rate").value), 2)}%`;
+  }
+  if (module === "contractual") {
+    const exercise = q("exerciseStyle").value === "american" ? "American" : "European";
+    return `${exercise} · Strike ${formatNumber(Number(q("strike").value), 2)} · `
+      + `${formatNumber(Number(q("maturity").value), 4)} yr`;
+  }
+  if (module === "model") {
+    const root = step.closest("[data-panel]");
+    return `${engineLabelFor(root)} · ${methods[q("method").value].label}`;
+  }
+  return "";
+}
+
+function setStepState(step, state) {
+  step.dataset.state = state;
+  step.hidden = state === "upcoming";
+  if (state === "answered") {
+    step.querySelector(".wizard-step-summary").textContent = summarizeStep(step);
+  }
+}
+
+function advanceStep(panelRoot, fromModule, toModule) {
+  const fromStep = panelRoot.querySelector(`.wizard-step[data-module="${fromModule}"]`);
+  setStepState(fromStep, "answered");
+  const toStep = panelRoot.querySelector(`.wizard-step[data-module="${toModule}"]`);
+  setStepState(toStep, "active");
+  const panel = panels.get(panelRoot.dataset.panel);
+  if (toModule === "model" && panel && !panel.engineLoadStarted) {
+    panel.engineLoadStarted = true;
+    panel.selectEngine();
+  }
+}
+
+function validateStep(step) {
+  const inputs = [...step.querySelectorAll("input, select")].filter((el) => !el.disabled);
+  for (const el of inputs) {
+    if (!el.checkValidity()) {
+      el.reportValidity();
+      return false;
+    }
+  }
+  return true;
+}
+
+function createInstrumentPanel(prefillEntry) {
+  const panelId = String((panelIdCounter += 1));
+  const fragment = instrumentTemplate.content.cloneNode(true);
+  const root = fragment.querySelector("[data-panel]");
+  root.dataset.panel = panelId;
+  instrumentsList.insertBefore(fragment, addInstrumentButton);
+
+  const form = root.querySelector(".pricing-form");
+  const priceButton = root.querySelector(".price-button");
+  const statusElement = root.querySelector(".engine-status");
+  const engineLine = root.querySelector(".panel-engine-line");
+  const errorElement = root.querySelector(".form-error");
+  const resultPanel = root.querySelector(".result-panel");
+  const distributionPanel = root.querySelector(".distribution-panel");
+  const sourceLink = root.querySelector(".verify-source-link");
+  const engineSelect = root.querySelector('[name="engine"]');
+  const methodSelect = root.querySelector('[name="method"]');
+  const exerciseSelect = root.querySelector('[name="exerciseStyle"]');
+  const removeButton = root.querySelector(".instrument-remove");
+
+  const priceOutput = root.querySelector(".price-output");
+  const errorOutput = root.querySelector(".error-output");
+  const intervalOutput = root.querySelector(".interval-output");
+  const intervalRow = root.querySelector(".interval-row");
+  const stdOutput = root.querySelector(".std-output");
+  const stdRow = root.querySelector(".std-row");
+  const samplingOutput = root.querySelector(".sampling-output");
+  const samplingRow = root.querySelector(".sampling-row");
+  const varianceOutput = root.querySelector(".variance-output");
+  const varianceRow = root.querySelector(".variance-row");
+  const runtimeOutput = root.querySelector(".runtime-output");
+  const workloadOutput = root.querySelector(".workload-output");
+  const engineOutput = root.querySelector(".engine-output");
+  const methodOutput = root.querySelector(".method-output");
+  const exerciseOutput = root.querySelector(".exercise-output");
+  const payoffOutput = root.querySelector(".payoff-output");
+  const payoffChartTitle = root.querySelector(".payoff-chart-title");
+  const terminalChart = root.querySelector(".terminal-chart");
+  const payoffChart = root.querySelector(".payoff-chart");
+  const payoffFunctionChart = root.querySelector(".payoff-function-chart");
 
   let requestId = 0;
   let engineReady = false;
@@ -459,6 +527,7 @@ function initPricingPanel(suffix, { hasDistribution = false } = {}) {
   let resizeFrame;
 
   function setEngineStatus(label, state) {
+    engineLine.hidden = false;
     statusElement.textContent = label;
     statusElement.dataset.state = state;
   }
@@ -481,15 +550,18 @@ function initPricingPanel(suffix, { hasDistribution = false } = {}) {
       });
     });
     resultPanel.hidden = true;
-    if (hasDistribution) {
-      distributionPanel.hidden = true;
-      latestDistribution = undefined;
-    }
+    distributionPanel.hidden = true;
+    latestDistribution = undefined;
     errorElement.textContent = "";
 
     if (sourceLink) {
       const model = SOURCE_MODEL_BY_METHOD[method] ?? "black_scholes";
       sourceLink.href = `code.html?model=${model}`;
+    }
+
+    const modelStep = form.querySelector('.wizard-step[data-module="model"]');
+    if (modelStep.dataset.state === "answered") {
+      modelStep.querySelector(".wizard-step-summary").textContent = summarizeStep(modelStep);
     }
   }
 
@@ -525,7 +597,7 @@ function initPricingPanel(suffix, { hasDistribution = false } = {}) {
   }
 
   function renderDistribution() {
-    if (!hasDistribution || !latestDistribution || distributionPanel.hidden) return;
+    if (!latestDistribution || distributionPanel.hidden) return;
     drawHistogram(terminalChart, latestDistribution.terminalPrices, "#5ee1c2");
     drawHistogram(payoffChart, latestDistribution.payoffs, "#ffd166");
     drawPayoffFunction(payoffFunctionChart, latestDistribution.inputs, latestDistribution.terminalPrices);
@@ -620,14 +692,14 @@ function initPricingPanel(suffix, { hasDistribution = false } = {}) {
     resultPanel.hidden = false;
     addHistoryEntry(inputs, engineSelect.value, message);
 
-    if (hasDistribution && isMonteCarlo && inputs.includeDistribution && message.distribution) {
+    if (isMonteCarlo && inputs.includeDistribution && message.distribution) {
       latestDistribution = { ...message.distribution, inputs };
       payoffChartTitle.textContent = inputs.optionType === "call"
         ? "European call payoff function"
         : "European put payoff function";
       distributionPanel.hidden = false;
       window.requestAnimationFrame(renderDistribution);
-    } else if (hasDistribution) {
+    } else {
       latestDistribution = undefined;
       distributionPanel.hidden = true;
     }
@@ -642,10 +714,8 @@ function initPricingPanel(suffix, { hasDistribution = false } = {}) {
     clearEngineLoadTimer();
     errorElement.textContent = "";
     resultPanel.hidden = true;
-    if (hasDistribution) {
-      distributionPanel.hidden = true;
-      latestDistribution = undefined;
-    }
+    distributionPanel.hidden = true;
+    latestDistribution = undefined;
     engineReady = false;
     requestId += 1;
 
@@ -668,37 +738,6 @@ function initPricingPanel(suffix, { hasDistribution = false } = {}) {
         );
       }
     }, engine.loadTimeoutMs);
-  }
-
-  function applyEntry(entry) {
-    const { inputs, engineKey } = entry;
-    if (engineSelect.value !== engineKey) {
-      engineSelect.value = engineKey;
-      selectEngine();
-    }
-    exerciseSelect.value = inputs.exerciseStyle;
-    updateMethodOptions();
-    methodSelect.value = inputs.method;
-    updateMethodFields();
-    form.elements.optionType.value = inputs.optionType;
-    form.elements.spot.value = inputs.spot;
-    form.elements.strike.value = inputs.strike;
-    form.elements.maturity.value = inputs.maturity;
-    form.elements.rate.value = inputs.rate * 100;
-    form.elements.dividendYield.value = inputs.dividendYield * 100;
-    form.elements.volatility.value = inputs.volatility * 100;
-    if (inputs.method === "monte-carlo") {
-      form.elements.paths.value = inputs.paths;
-      form.elements.seed.value = inputs.seed;
-      form.elements.sampling.value = inputs.sampling;
-      form.elements.varianceReduction.value = inputs.varianceReduction;
-      if (hasDistribution) form.elements.showDistribution.checked = inputs.includeDistribution;
-    } else if (inputs.method === "binomial") {
-      form.elements.steps.value = inputs.steps;
-    } else if (inputs.method === "carr-randomization") {
-      form.elements.carrPhases.value = inputs.carrPhases;
-    }
-    form.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   form.addEventListener("submit", (event) => {
@@ -729,8 +768,8 @@ function initPricingPanel(suffix, { hasDistribution = false } = {}) {
       varianceReduction: method === "monte-carlo"
         ? form.elements.varianceReduction.value
         : "none",
-      includeDistribution: hasDistribution && method === "monte-carlo" && form.elements.showDistribution.checked,
-      optionType: form.elements.optionType.value,
+      includeDistribution: method === "monte-carlo" && form.elements.showDistribution.checked,
+      optionType: form.querySelector('input[name="optionType"]:checked').value,
     };
 
     if (method === "monte-carlo" && (!Number.isInteger(inputs.paths) || inputs.paths < 2 || inputs.paths > 2_000_000)) {
@@ -762,10 +801,8 @@ function initPricingPanel(suffix, { hasDistribution = false } = {}) {
     requestId += 1;
     pendingInputs = inputs;
     resultPanel.hidden = true;
-    if (hasDistribution) {
-      distributionPanel.hidden = true;
-      latestDistribution = undefined;
-    }
+    distributionPanel.hidden = true;
+    latestDistribution = undefined;
     setBusy(true);
     setEngineStatus(
       `${engines[engineSelect.value].label} ${methods[method].label} running`,
@@ -774,120 +811,184 @@ function initPricingPanel(suffix, { hasDistribution = false } = {}) {
     worker.postMessage({ type: "price", requestId, inputs });
   });
 
-  if (hasDistribution) {
-    window.addEventListener("resize", () => {
-      if (!latestDistribution || distributionPanel.hidden) return;
-      window.cancelAnimationFrame(resizeFrame);
-      resizeFrame = window.requestAnimationFrame(renderDistribution);
-    });
-  }
+  window.addEventListener("resize", () => {
+    if (!latestDistribution || distributionPanel.hidden) return;
+    window.cancelAnimationFrame(resizeFrame);
+    resizeFrame = window.requestAnimationFrame(renderDistribution);
+  });
 
   engineSelect.addEventListener("change", selectEngine);
   methodSelect.addEventListener("change", updateMethodFields);
   exerciseSelect.addEventListener("change", updateMethodOptions);
-  updateMethodOptions();
-  selectEngine();
 
-  return { form, engineSelect, methodSelect, exerciseSelect, selectEngine, updateMethodOptions, updateMethodFields, applyEntry };
+  root.querySelectorAll('input[name="optionType"]').forEach((radio) => {
+    radio.addEventListener("click", () => {
+      const step = form.querySelector('.wizard-step[data-module="option-type"]');
+      if (step.dataset.state === "active") advanceStep(root, "option-type", "asset");
+      else if (step.dataset.state === "answered") {
+        step.querySelector(".wizard-step-summary").textContent = summarizeStep(step);
+      }
+    });
+  });
+
+  form.querySelectorAll(".wizard-continue").forEach((button) => {
+    button.addEventListener("click", () => {
+      const step = button.closest(".wizard-step");
+      if (!validateStep(step)) return;
+      advanceStep(root, step.dataset.module, button.dataset.next);
+    });
+  });
+
+  form.querySelectorAll(".wizard-step-summary").forEach((summary) => {
+    summary.addEventListener("click", () => {
+      const step = summary.closest(".wizard-step");
+      setStepState(step, "active");
+    });
+  });
+
+  removeButton.addEventListener("click", () => {
+    if (worker) worker.terminate();
+    root.remove();
+    panels.delete(panelId);
+  });
+
+  updateMethodOptions();
+
+  const control = {
+    root,
+    engineSelect,
+    selectEngine,
+    updateMethodOptions,
+    updateMethodFields,
+    engineLoadStarted: false,
+  };
+  panels.set(panelId, control);
+
+  if (prefillEntry) {
+    const { inputs, engineKey } = prefillEntry;
+    root.querySelector(`input[name="optionType"][value="${inputs.optionType}"]`).checked = true;
+    form.elements.spot.value = inputs.spot;
+    form.elements.volatility.value = inputs.volatility * 100;
+    form.elements.dividendYield.value = inputs.dividendYield * 100;
+    form.elements.rate.value = inputs.rate * 100;
+    exerciseSelect.value = inputs.exerciseStyle;
+    form.elements.strike.value = inputs.strike;
+    form.elements.maturity.value = inputs.maturity;
+    updateMethodOptions();
+    engineSelect.value = engineKey;
+    methodSelect.value = inputs.method;
+    updateMethodFields();
+    if (inputs.method === "monte-carlo") {
+      form.elements.paths.value = inputs.paths;
+      form.elements.seed.value = inputs.seed;
+      form.elements.sampling.value = inputs.sampling;
+      form.elements.varianceReduction.value = inputs.varianceReduction;
+      form.elements.showDistribution.checked = inputs.includeDistribution;
+    } else if (inputs.method === "binomial") {
+      form.elements.steps.value = inputs.steps;
+    } else if (inputs.method === "carr-randomization") {
+      form.elements.carrPhases.value = inputs.carrPhases;
+    }
+
+    ["option-type", "asset", "contractual"].forEach((module) => {
+      setStepState(form.querySelector(`.wizard-step[data-module="${module}"]`), "answered");
+    });
+    setStepState(form.querySelector('.wizard-step[data-module="model"]'), "active");
+    control.engineLoadStarted = true;
+    selectEngine();
+  }
+
+  root.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "end" });
+  return control;
 }
 
 // ===================== Drag-and-drop module copy =====================
 //
-// Each of the 3 field-section modules (Underlying asset(s), Contractual
-// info, Model) can be dragged by its label onto the same module in another
-// panel to copy just that module's field values across -- lets you build
-// two scenarios that share, say, the same underlying but differ in strike.
+// Each wizard step doubles as a drop target for its module type. Dragging
+// a module's handle from one instrument onto the same module in another
+// (only steps that are currently visible -- active or answered -- can be
+// drop targets, since a hidden/upcoming step can't receive pointer events)
+// copies just that module's field values across.
 
-function copyModuleValues(sourceSection, targetSection, targetPanel) {
-  const sourceFields = [...sourceSection.querySelectorAll("input, select")];
-  const targetFields = [...targetSection.querySelectorAll("input, select")];
+function copyModuleValues(sourceStep, targetStep, targetPanelId) {
+  const sourceFields = [...sourceStep.querySelectorAll("input, select")];
+  const targetFields = [...targetStep.querySelectorAll("input, select")];
   sourceFields.forEach((sourceField, index) => {
     const targetField = targetFields[index];
     if (!targetField) return;
-    if (sourceField.type === "checkbox") {
+    if (sourceField.type === "checkbox" || sourceField.type === "radio") {
       targetField.checked = sourceField.checked;
     } else {
       targetField.value = sourceField.value;
     }
   });
 
-  const module = targetSection.dataset.module;
+  const targetControl = panels.get(targetPanelId);
+  if (!targetControl) return;
+  const module = targetStep.dataset.module;
   if (module === "contractual") {
-    targetPanel.updateMethodOptions();
+    targetControl.updateMethodOptions();
   } else if (module === "model") {
-    const sourceEngine = sourceSection.querySelector('[name="engine"]')?.value;
-    if (sourceEngine && targetPanel.engineSelect.value !== sourceEngine) {
-      targetPanel.engineSelect.value = sourceEngine;
-      targetPanel.selectEngine();
+    const sourceEngine = sourceStep.querySelector('[name="engine"]')?.value;
+    if (sourceEngine && targetControl.engineSelect.value !== sourceEngine) {
+      targetControl.engineSelect.value = sourceEngine;
+      targetControl.engineLoadStarted = true;
+      targetControl.selectEngine();
     }
-    targetPanel.updateMethodFields();
+    targetControl.updateMethodFields();
+  } else if (module === "option-type") {
+    // No dependent state to refresh.
+  }
+
+  if (targetStep.dataset.state === "answered") {
+    targetStep.querySelector(".wizard-step-summary").textContent = summarizeStep(targetStep);
   }
 }
 
-function initModuleDragAndDrop() {
-  document.querySelectorAll(".field-section[data-module]").forEach((section) => {
-    const handle = section.querySelector(".module-drag-handle");
-    if (!handle) return;
-    handle.draggable = true;
-    handle.addEventListener("dragstart", (event) => {
-      const panelRoot = section.closest("[data-panel]");
-      event.dataTransfer.setData("text/plain", `${panelRoot.dataset.panel}|${section.dataset.module}`);
-      event.dataTransfer.effectAllowed = "copy";
-    });
+instrumentsList.addEventListener("dragstart", (event) => {
+  const handle = event.target.closest(".module-drag-handle");
+  if (!handle) return;
+  const step = handle.closest(".wizard-step");
+  const panelRoot = handle.closest("[data-panel]");
+  event.dataTransfer.setData("text/plain", `${panelRoot.dataset.panel}|${step.dataset.module}`);
+  event.dataTransfer.effectAllowed = "copy";
+});
 
-    section.addEventListener("dragover", (event) => {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-      section.classList.add("drag-target");
-    });
+instrumentsList.addEventListener("dragover", (event) => {
+  const step = event.target.closest(".wizard-step[data-module]");
+  if (!step) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+  step.classList.add("drag-target");
+});
 
-    section.addEventListener("dragleave", () => {
-      section.classList.remove("drag-target");
-    });
+instrumentsList.addEventListener("dragleave", (event) => {
+  const step = event.target.closest(".wizard-step[data-module]");
+  step?.classList.remove("drag-target");
+});
 
-    section.addEventListener("drop", (event) => {
-      event.preventDefault();
-      section.classList.remove("drag-target");
-      const [sourcePanelSuffix, module] = event.dataTransfer.getData("text/plain").split("|");
-      const targetPanelRoot = section.closest("[data-panel]");
-      const targetPanelSuffix = targetPanelRoot.dataset.panel;
-      if (sourcePanelSuffix === targetPanelSuffix || module !== section.dataset.module) return;
-      const sourceSection = document.querySelector(
-        `[data-panel="${sourcePanelSuffix}"] .field-section[data-module="${module}"]`,
-      );
-      const targetPanel = panels[targetPanelSuffix];
-      if (!sourceSection || !targetPanel) return;
-      copyModuleValues(sourceSection, section, targetPanel);
-    });
-  });
-}
+instrumentsList.addEventListener("drop", (event) => {
+  const targetStep = event.target.closest(".wizard-step[data-module]");
+  if (!targetStep) return;
+  event.preventDefault();
+  targetStep.classList.remove("drag-target");
+  const [sourcePanelId, module] = event.dataTransfer.getData("text/plain").split("|");
+  const targetPanelRoot = targetStep.closest("[data-panel]");
+  const targetPanelId = targetPanelRoot.dataset.panel;
+  if (sourcePanelId === targetPanelId || module !== targetStep.dataset.module) return;
+  const sourceStep = document.querySelector(
+    `[data-panel="${sourcePanelId}"] .wizard-step[data-module="${module}"]`,
+  );
+  if (!sourceStep) return;
+  copyModuleValues(sourceStep, targetStep, targetPanelId);
+});
 
 // ===================== Boot =====================
 
 if (window.location.protocol === "file:") {
-  const priceButton = document.querySelector("#price-button");
-  const statusElement = document.querySelector("#engine-status");
-  statusElement.textContent = "Opening the required local server...";
-  statusElement.dataset.state = "working";
-  priceButton.disabled = true;
-  priceButton.textContent = "Opening local server...";
+  addInstrumentButton.disabled = true;
+  addInstrumentButton.textContent = "Opening local server...";
   window.location.replace("http://127.0.0.1:8000/");
 } else {
-  panels[""] = initPricingPanel("", { hasDistribution: true });
-
-  const compareButton = document.querySelector("#compare-button");
-  const panel2Container = document.querySelector("#panel-2");
-  if (compareButton && panel2Container) {
-    let panel2Initialized = false;
-    compareButton.addEventListener("click", () => {
-      panel2Container.hidden = false;
-      compareButton.hidden = true;
-      if (!panel2Initialized) {
-        panels["-2"] = initPricingPanel("-2", { hasDistribution: false });
-        panel2Initialized = true;
-      }
-    });
-  }
-
-  initModuleDragAndDrop();
+  addInstrumentButton.addEventListener("click", () => createInstrumentPanel());
 }

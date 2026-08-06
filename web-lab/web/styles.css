@@ -134,6 +134,10 @@ h1 {
   font-size: 0.9rem;
 }
 
+.engine-line[hidden] {
+  display: none;
+}
+
 .engine-dot {
   width: 9px;
   height: 9px;
@@ -164,25 +168,8 @@ h1 {
   margin-top: 46px;
 }
 
-.workspace + .workspace {
-  margin-top: 24px;
-}
-
 .workspace[hidden] {
   display: none;
-}
-
-.panel-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 22px;
-}
-
-.panel-toolbar-hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.78rem;
 }
 
 .panel {
@@ -197,13 +184,13 @@ h1 {
   padding: 26px;
 }
 
-.field-section + .field-section {
-  margin-top: 26px;
-  padding-top: 22px;
+.wizard-step + .wizard-step {
+  margin-top: 22px;
+  padding-top: 20px;
   border-top: 1px solid var(--border);
 }
 
-.field-section-label {
+.wizard-step-label {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -215,9 +202,37 @@ h1 {
   text-transform: uppercase;
 }
 
-.field-section {
+.wizard-step {
   border-radius: 12px;
   transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.wizard-step[data-state="answered"] .wizard-step-body {
+  display: none;
+}
+
+.wizard-step-summary {
+  display: none;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.wizard-step[data-state="answered"] .wizard-step-summary {
+  display: block;
+}
+
+.wizard-step[data-state="answered"] .wizard-step-summary:hover {
+  color: var(--accent);
+}
+
+.wizard-step[data-state="answered"] .wizard-step-label {
+  cursor: pointer;
+}
+
+.wizard-continue {
+  margin-top: 18px;
 }
 
 .module-drag-handle {
@@ -232,13 +247,50 @@ h1 {
   cursor: grabbing;
 }
 
-.field-section:has(.module-drag-handle:hover) {
+.wizard-step:has(.module-drag-handle:hover) {
   background: rgba(148, 168, 194, 0.06);
 }
 
-.field-section.drag-target {
+.wizard-step.drag-target {
   background: rgba(94, 225, 194, 0.08);
-  box-shadow: 0 0 0 1.5px var(--accent, #5ee1c2) inset;
+  box-shadow: 0 0 0 1.5px var(--accent) inset;
+}
+
+.option-toggle {
+  display: flex;
+  gap: 10px;
+}
+
+.option-toggle-choice {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.option-toggle-choice input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.option-toggle-choice:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(94, 225, 194, 0.1);
+  color: var(--accent);
+}
+
+.option-toggle-choice:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .form-grid {
@@ -706,5 +758,125 @@ button:disabled {
 
   button {
     width: 100%;
+  }
+}
+
+/* ===================== Instrument panels (index.html) ===================== */
+
+.instruments {
+  margin-top: 46px;
+}
+
+.instruments-list {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+
+.instrument-panel {
+  flex: 0 0 420px;
+  width: 420px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(13, 26, 43, 0.88);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(14px);
+  padding: 26px;
+}
+
+.instrument-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.instrument-eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.instrument-remove {
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--muted);
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.instrument-remove:hover {
+  background: rgba(255, 139, 139, 0.18);
+  color: var(--danger);
+}
+
+.add-instrument-button {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 220px;
+  align-self: stretch;
+  border: 1.5px dashed var(--border);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.add-instrument-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(94, 225, 194, 0.06);
+}
+
+.add-instrument-plus {
+  font-size: 2rem;
+  line-height: 1;
+  font-weight: 400;
+}
+
+.instruments-list:has(.instrument-panel) .add-instrument-button {
+  flex: 0 0 72px;
+  min-height: 72px;
+  flex-direction: row;
+  align-self: flex-start;
+}
+
+.instrument-panel .result-panel {
+  min-height: auto;
+  margin-top: 22px;
+  padding: 22px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.instrument-panel .distribution-panel {
+  margin-top: 22px;
+  padding: 22px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.instrument-panel .chart-grid {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 460px) {
+  .instrument-panel,
+  .add-instrument-button {
+    flex-basis: calc(100vw - 96px);
+    width: calc(100vw - 96px);
   }
 }
