@@ -107,6 +107,27 @@
               </span>
               <span class="module-trigger-summary"></span>
             </button>
+            <button type="button" class="module-trigger" data-module="note-terms" draggable="true" hidden>
+              <span class="module-trigger-label">
+                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
+                Note terms
+              </span>
+              <span class="module-trigger-summary"></span>
+            </button>
+            <button type="button" class="module-trigger" data-module="compound-terms" draggable="true" hidden>
+              <span class="module-trigger-label">
+                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
+                Compound terms
+              </span>
+              <span class="module-trigger-summary"></span>
+            </button>
+            <button type="button" class="module-trigger" data-module="variance-terms" draggable="true" hidden>
+              <span class="module-trigger-label">
+                <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
+                Variance / vol terms
+              </span>
+              <span class="module-trigger-summary"></span>
+            </button>
             <button type="button" class="module-trigger" data-module="asset" draggable="true">
               <span class="module-trigger-label">
                 <span class="module-drag-handle" aria-hidden="true" title="Drag onto another instrument to copy">⠿</span>
@@ -137,12 +158,26 @@
                   <option value="vanilla-american">American vanilla</option>
                   <option value="digital">Digital / binary</option>
                   <option value="barrier">Single barrier</option>
+                  <option value="double-barrier">Double barrier</option>
+                  <option value="bermudan">Bermudan</option>
                   <option value="asian">Discrete arithmetic Asian</option>
                   <option value="rainbow">Rainbow / order statistic</option>
+                  <option value="himalayan">Himalayan</option>
+                  <option value="lookback">Lookback</option>
+                  <option value="ladder">Ladder</option>
+                  <option value="compound">Compound option</option>
+                  <option value="autocallable">Autocallable</option>
+                  <option value="phoenix-autocall">Phoenix autocall</option>
+                  <option value="yield-seeker">Yield seeker</option>
+                  <option value="accumulator">Accumulator</option>
+                  <option value="variance-swap">Variance swap</option>
+                  <option value="volatility-swap">Volatility swap</option>
+                  <option value="variance-option">Option on variance</option>
+                  <option value="volatility-option">Option on volatility</option>
                 </select>
               </label>
             </div>
-            <div class="option-toggle" role="radiogroup" aria-label="Option type">
+            <div class="option-toggle" role="radiogroup" aria-label="Option type" data-optiontype-toggle>
               <label class="option-toggle-choice">
                 <input type="radio" name="optionType" value="call" checked>
                 <span>Call</span>
@@ -182,9 +217,10 @@
                   <option value="worst">Worst performer</option>
                 </select>
               </label>
-              <label class="field" data-payoff-only="rainbow" hidden>
+              <label class="field" data-payoff-only="rainbow,himalayan" hidden>
                 Asset count
                 <select name="assetCount" disabled>
+                  <option value="1">One</option>
                   <option value="2">Two</option>
                   <option value="3">Three</option>
                 </select>
@@ -199,16 +235,24 @@
           <dialog class="module-dialog" data-module="barrier-terms">
             <h3>Barrier terms</h3>
             <div class="form-grid">
-              <label class="field">
+              <label class="field" data-payoff-only="barrier">
                 Barrier level
-                <input name="barrier" type="number" min="0.0001" step="any" value="125" required>
+                <input name="barrier" type="number" min="0.0001" step="any" value="125">
               </label>
-              <label class="field">
+              <label class="field" data-payoff-only="barrier">
                 Barrier direction
                 <select name="barrierDirection">
                   <option value="up">Up</option>
                   <option value="down">Down</option>
                 </select>
+              </label>
+              <label class="field" data-payoff-only="double-barrier" hidden>
+                Lower barrier
+                <input name="lowerBarrier" type="number" min="0.0001" step="any" value="70" disabled>
+              </label>
+              <label class="field" data-payoff-only="double-barrier" hidden>
+                Upper barrier
+                <input name="upperBarrier" type="number" min="0.0001" step="any" value="130" disabled>
               </label>
               <label class="field">
                 Barrier style
@@ -227,9 +271,17 @@
           <dialog class="module-dialog" data-module="schedule">
             <h3>Schedule</h3>
             <div class="form-grid">
-              <label class="field">
+              <label class="field" data-payoff-only="digital,barrier,double-barrier,rainbow,autocallable,phoenix-autocall,yield-seeker,himalayan,asian,lookback,ladder,compound,variance-swap,volatility-swap,variance-option,volatility-option,accumulator">
                 Observation count
-                <input name="monitoringSteps" type="number" min="1" max="260" step="1" value="12" required>
+                <input name="monitoringSteps" type="number" min="1" max="260" step="1" value="12">
+              </label>
+              <label class="field" data-payoff-only="bermudan" hidden>
+                Exercise date count
+                <input name="exerciseDates" type="number" min="1" max="260" step="1" value="4" disabled>
+              </label>
+              <label class="field" data-payoff-only="bermudan" hidden>
+                Tree steps
+                <input name="treeSteps" type="number" min="50" max="2000" step="1" value="600" disabled>
               </label>
               <label class="field">
                 Observation schedule
@@ -247,9 +299,140 @@
                 Custom dates · comma separated
                 <input name="observationDates" type="text" value="2026-09-01, 2026-10-15, 2027-01-04, 2027-08-02">
               </label>
+              <label class="field" data-payoff-only="ladder" hidden>
+                Ladder rungs · comma separated
+                <input name="ladderRungs" type="text" value="110,120,130" disabled>
+              </label>
               <label class="checkbox" data-payoff-only="asian" hidden>
                 <input name="includeInitialFixing" type="checkbox">
                 Include initial spot fixing
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel">Cancel</button>
+              <button type="button" class="dialog-save">Save</button>
+            </div>
+          </dialog>
+
+          <dialog class="module-dialog" data-module="note-terms">
+            <h3>Note terms</h3>
+            <div class="form-grid">
+              <label class="field" data-payoff-only="autocallable,phoenix-autocall,yield-seeker,himalayan,accumulator">
+                Notional
+                <input name="notional" type="number" min="0.01" step="any" value="100">
+              </label>
+              <label class="field" data-payoff-only="autocallable,phoenix-autocall,yield-seeker">
+                Coupon per observation
+                <div class="input-wrap">
+                  <input name="coupon" type="number" min="0" step="any" value="2" data-transform="percent">
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field" data-payoff-only="phoenix-autocall,yield-seeker" hidden>
+                Coupon barrier / initial
+                <input name="couponBarrier" type="number" min="0" step="0.01" value="0.7" disabled>
+              </label>
+              <label class="field" data-payoff-only="autocallable,phoenix-autocall">
+                Autocall barrier / initial
+                <input name="autocallBarrier" type="number" min="0" step="0.01" value="1">
+              </label>
+              <label class="field" data-payoff-only="autocallable,phoenix-autocall,yield-seeker">
+                Protection barrier / initial
+                <input name="protectionBarrier" type="number" min="0" step="0.01" value="0.7">
+              </label>
+              <label class="checkbox" data-payoff-only="phoenix-autocall,yield-seeker" hidden>
+                <input name="memoryCoupon" type="checkbox" checked disabled>
+                Memory coupon
+              </label>
+              <label class="field" data-payoff-only="himalayan" hidden>
+                Lock-in observations
+                <input name="observations" type="number" min="1" max="3" step="1" value="3" disabled>
+              </label>
+              <label class="field" data-payoff-only="himalayan" hidden>
+                Return strike
+                <div class="input-wrap">
+                  <input name="returnStrike" type="number" step="any" value="0" data-transform="percent" disabled>
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field" data-payoff-only="accumulator" hidden>
+                Base quantity per fixing
+                <input name="accumulatorQuantity" type="number" min="0" step="any" value="1" disabled>
+              </label>
+              <label class="field" data-payoff-only="accumulator" hidden>
+                Downside gearing
+                <input name="accumulatorGearing" type="number" min="0" step="any" value="2" disabled>
+              </label>
+              <label class="field" data-payoff-only="accumulator" hidden>
+                Knock-out / initial
+                <input name="accumulatorKnockOut" type="number" min="0" step="0.01" value="1.1" disabled>
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel">Cancel</button>
+              <button type="button" class="dialog-save">Save</button>
+            </div>
+          </dialog>
+
+          <dialog class="module-dialog" data-module="compound-terms">
+            <h3>Compound terms</h3>
+            <div class="form-grid">
+              <label class="field">
+                Compound option type
+                <select name="compoundOuterType">
+                  <option value="call">Call on inner</option>
+                  <option value="put">Put on inner</option>
+                </select>
+              </label>
+              <label class="field">
+                Underlying option type
+                <select name="compoundInnerType">
+                  <option value="call">Call</option>
+                  <option value="put">Put</option>
+                </select>
+              </label>
+              <label class="field">
+                Compound decision time
+                <div class="input-wrap">
+                  <input name="decisionTime" type="number" min="0.001" step="any" value="0.5">
+                  <span class="suffix">years</span>
+                </div>
+              </label>
+              <label class="field">
+                Compound strike
+                <input name="compoundStrike" type="number" min="0" step="any" value="5">
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button type="button" class="dialog-cancel">Cancel</button>
+              <button type="button" class="dialog-save">Save</button>
+            </div>
+          </dialog>
+
+          <dialog class="module-dialog" data-module="variance-terms">
+            <h3>Variance / volatility terms</h3>
+            <div class="form-grid">
+              <label class="field" data-payoff-only="variance-swap,variance-option">
+                Variance strike · variance × 100
+                <div class="input-wrap">
+                  <input name="varianceStrike" type="number" min="0" step="any" value="4" data-transform="percent">
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field" data-payoff-only="volatility-swap,volatility-option" hidden>
+                Volatility strike
+                <div class="input-wrap">
+                  <input name="volatilityStrike" type="number" min="0" step="any" value="20" data-transform="percent" disabled>
+                  <span class="suffix">%</span>
+                </div>
+              </label>
+              <label class="field">
+                Notional
+                <input name="varianceNotional" type="number" min="0" step="any" value="1000">
+              </label>
+              <label class="field">
+                Annualization factor
+                <input name="annualization" type="number" min="0.001" step="any" value="1">
               </label>
             </div>
             <div class="dialog-actions">
@@ -287,14 +470,14 @@
               <label class="field">
                 Asset 2 initial volatility
                 <div class="input-wrap">
-                  <input name="volatility2" type="number" min="0.01" step="any" value="25">
+                  <input name="volatility2" type="number" min="0.01" step="any" value="25" data-transform="percent">
                   <span class="suffix">%</span>
                 </div>
               </label>
               <label class="field">
                 Asset 2 dividend yield
                 <div class="input-wrap">
-                  <input name="dividendYield2" type="number" step="any" value="0">
+                  <input name="dividendYield2" type="number" step="any" value="0" data-transform="percent">
                   <span class="suffix">%</span>
                 </div>
               </label>
@@ -305,14 +488,14 @@
               <label class="field">
                 Asset 3 initial volatility
                 <div class="input-wrap">
-                  <input name="volatility3" type="number" min="0.01" step="any" value="30">
+                  <input name="volatility3" type="number" min="0.01" step="any" value="30" data-transform="percent">
                   <span class="suffix">%</span>
                 </div>
               </label>
               <label class="field">
                 Asset 3 dividend yield
                 <div class="input-wrap">
-                  <input name="dividendYield3" type="number" step="any" value="0">
+                  <input name="dividendYield3" type="number" step="any" value="0" data-transform="percent">
                   <span class="suffix">%</span>
                 </div>
               </label>

@@ -494,17 +494,40 @@ function summarizeModule(root, module) {
     return `${engineLabelFor(root)} · ${methodLabel}`;
   }
   if (module === "barrier-terms") {
-    const direction = q("barrierDirection").value === "down" ? "Down" : "Up";
     const style = q("barrierStyle").value === "in" ? "knock-in" : "knock-out";
+    if (payoffType === "double-barrier") {
+      return `Double ${style} · ${formatNumber(Number(q("lowerBarrier").value), 2)} - ${formatNumber(Number(q("upperBarrier").value), 2)}`;
+    }
+    const direction = q("barrierDirection").value === "down" ? "Down" : "Up";
     return `${direction} ${style} @ ${formatNumber(Number(q("barrier").value), 2)}`;
   }
   if (module === "schedule") {
     const mode = q("scheduleMode").value;
     const modeLabel = mode === "equal" ? "Equally spaced" : mode === "custom" ? "Custom dates" : "Monthly business day";
-    return `${modeLabel} · ${formatNumber(Number(q("monitoringSteps").value), 0)} observations`;
+    const count = payoffType === "bermudan" ? q("exerciseDates").value : q("monitoringSteps").value;
+    return `${modeLabel} · ${formatNumber(Number(count), 0)} observations`;
   }
   if (module === "basket") {
     return `${q("basketAssetCount").value}-asset basket · correlation ${formatNumber(Number(q("correlation").value), 2)}`;
+  }
+  if (module === "note-terms") {
+    if (payoffType === "accumulator") {
+      return `Gearing ${formatNumber(Number(q("accumulatorGearing").value), 2)} · knock-out ${formatNumber(Number(q("accumulatorKnockOut").value), 2)}`;
+    }
+    if (payoffType === "himalayan") {
+      return `${q("observations").value} lock-ins · notional ${formatNumber(Number(q("notional").value), 2)}`;
+    }
+    return `Notional ${formatNumber(Number(q("notional").value), 2)} · coupon ${formatNumber(Number(q("coupon").value), 2)}%`;
+  }
+  if (module === "compound-terms") {
+    return `${q("compoundOuterType").value === "put" ? "Put" : "Call"} on ${q("compoundInnerType").value} · `
+      + `decision @ ${formatNumber(Number(q("decisionTime").value), 4)} yr`;
+  }
+  if (module === "variance-terms") {
+    const isVol = payoffType.startsWith("volatility");
+    const strikeField = isVol ? "volatilityStrike" : "varianceStrike";
+    return `${isVol ? "Vol" : "Variance"} strike ${formatNumber(Number(q(strikeField).value), 2)}% · `
+      + `notional ${formatNumber(Number(q("varianceNotional").value), 2)}`;
   }
   return "";
 }
@@ -558,6 +581,10 @@ function createInstrumentPanel(prefillEntry) {
   const barrierTermsTrigger = root.querySelector('.module-trigger[data-module="barrier-terms"]');
   const scheduleTrigger = root.querySelector('.module-trigger[data-module="schedule"]');
   const basketTrigger = root.querySelector('.module-trigger[data-module="basket"]');
+  const noteTermsTrigger = root.querySelector('.module-trigger[data-module="note-terms"]');
+  const compoundTermsTrigger = root.querySelector('.module-trigger[data-module="compound-terms"]');
+  const varianceTermsTrigger = root.querySelector('.module-trigger[data-module="variance-terms"]');
+  const optionTypeToggle = root.querySelector('[data-optiontype-toggle]');
   const scheduleModeSelect = root.querySelector('.module-dialog[data-module="schedule"] [name="scheduleMode"]');
 
   const priceOutput = root.querySelector(".price-output");
@@ -674,7 +701,14 @@ function createInstrumentPanel(prefillEntry) {
   function updateExoticScheduleFields() {
     const scheduleDialog = root.querySelector('.module-dialog[data-module="schedule"]');
     const mode = scheduleModeSelect.value;
-    scheduleDialog.querySelector('[name="monitoringSteps"]').closest(".field").hidden = mode !== "equal";
+    const product = payoffTypeSelect.value;
+    // Bermudan uses its own "exerciseDates" count field instead of the
+    // generic "monitoringSteps" -- both follow the same equal-mode-only
+    // visibility rule, but never both are the current product's field.
+    scheduleDialog.querySelector('[name="monitoringSteps"]').closest(".field").hidden =
+      product === "bermudan" || mode !== "equal";
+    scheduleDialog.querySelector('[name="exerciseDates"]').closest(".field").hidden =
+      product !== "bermudan" || mode !== "equal";
     scheduleDialog.querySelector('[name="valuationDate"]').closest(".field").hidden = mode === "equal";
     scheduleDialog.querySelector('[name="observationDates"]').closest(".field").hidden = mode !== "custom";
   }
@@ -728,15 +762,33 @@ function createInstrumentPanel(prefillEntry) {
     if (!exotic) exerciseSelect.value = payoffType === "vanilla-american" ? "american" : "european";
 
     root.querySelectorAll("[data-payoff-only]").forEach((element) => {
-      const key = element.dataset.payoffOnly;
-      const visible = key === "vanilla" ? !exotic : key === "exotic" ? exotic : key === product;
+      const keys = element.dataset.payoffOnly.split(",");
+      const visible = keys.length === 1 && keys[0] === "vanilla" ? !exotic
+        : keys.length === 1 && keys[0] === "exotic" ? exotic
+        : keys.includes(product);
       element.hidden = !visible;
       element.querySelectorAll("input, select").forEach((control) => { control.disabled = !visible; });
     });
 
-    barrierTermsTrigger.hidden = product !== "barrier";
-    scheduleTrigger.hidden = !(product === "barrier" || product === "asian");
-    basketTrigger.hidden = product !== "rainbow";
+    const SCHEDULE_PRODUCTS = new Set([
+      "barrier", "double-barrier", "bermudan", "asian", "lookback", "ladder",
+      "autocallable", "phoenix-autocall", "yield-seeker", "himalayan",
+      "variance-swap", "volatility-swap", "variance-option", "volatility-option", "accumulator",
+    ]);
+    const NOTE_PRODUCTS = new Set(["autocallable", "phoenix-autocall", "yield-seeker", "himalayan", "accumulator"]);
+    const VARIANCE_PRODUCTS = new Set(["variance-swap", "volatility-swap", "variance-option", "volatility-option"]);
+    const NO_OPTION_TYPE = new Set([
+      "autocallable", "phoenix-autocall", "yield-seeker", "himalayan", "compound",
+      "variance-swap", "volatility-swap", "accumulator",
+    ]);
+
+    barrierTermsTrigger.hidden = !(product === "barrier" || product === "double-barrier");
+    scheduleTrigger.hidden = !SCHEDULE_PRODUCTS.has(product);
+    basketTrigger.hidden = !(product === "rainbow" || product === "himalayan");
+    noteTermsTrigger.hidden = !NOTE_PRODUCTS.has(product);
+    compoundTermsTrigger.hidden = product !== "compound";
+    varianceTermsTrigger.hidden = !VARIANCE_PRODUCTS.has(product);
+    optionTypeToggle.hidden = NO_OPTION_TYPE.has(product);
     verifyLinks.hidden = exotic;
 
     const hasJsOption = [...engineSelect.options].some((option) => option.value === "js");
@@ -750,6 +802,7 @@ function createInstrumentPanel(prefillEntry) {
     if (exotic) {
       renderExoticVolatilityFields();
       updateExoticMethodOptions();
+      if (SCHEDULE_PRODUCTS.has(product)) updateExoticScheduleFields();
     } else {
       updateMethodOptions();
     }
@@ -767,11 +820,17 @@ function createInstrumentPanel(prefillEntry) {
     data.rate = Number(data.rate) / 100;
     data.dividendYield = Number(data.dividendYield) / 100;
     data.volatility = Number(data.volatility) / 100;
-    ["volatility2", "dividendYield2", "volatility3", "dividendYield3"].forEach((name) => {
-      if (data[name] !== undefined) data[name] = Number(data[name]) / 100;
+    // Generic, not a hardcoded field list: every field marked
+    // data-transform="percent" (the hand-written ones plus whatever
+    // renderExoticVolatilityFields() generated) gets divided by 100 --
+    // mirrors exotics.js's own readConfig() exactly.
+    form.querySelectorAll("[data-transform='percent']").forEach((input) => {
+      data[input.name] = Number(input.value) / 100;
     });
     data.randomizedQmc = Boolean(form.elements.randomizedQmc?.checked);
     data.includeInitialFixing = Boolean(form.elements.includeInitialFixing?.checked);
+    data.memoryCoupon = form.elements.memoryCoupon ? form.elements.memoryCoupon.checked : true;
+    data.ladderRungs = String(data.ladderRungs || "110,120,130").split(",").map(Number).filter(Number.isFinite);
     data.basketWeights = String(data.basketWeights || "0.5,0.3,0.2").split(",").map(Number).filter(Number.isFinite);
     data.observationTimes = ExoticFields.buildObservationTimes(data);
     return data;
@@ -1162,7 +1221,8 @@ function createInstrumentPanel(prefillEntry) {
   // must also re-sync the toolbar/Model dialog to whatever payoff type was
   // actually restored, not the tentative one the user was previewing.
   wireModuleDialog("contractual", updatePayoffVisibility);
-  ["asset", "model", "barrier-terms", "schedule", "basket"].forEach((module) => wireModuleDialog(module));
+  ["asset", "model", "barrier-terms", "schedule", "basket", "note-terms", "compound-terms", "variance-terms"]
+    .forEach((module) => wireModuleDialog(module));
 
   priceButton.addEventListener("click", () => form.requestSubmit());
   resultTrigger.addEventListener("click", () => {
@@ -1227,7 +1287,8 @@ function createInstrumentPanel(prefillEntry) {
     updateExoticMethodFields();
     renderExoticVolatilityFields();
     updateExoticScheduleFields();
-    ["contractual", "asset", "model", "barrier-terms", "schedule", "basket"].forEach(refreshSummary);
+    ["contractual", "asset", "model", "barrier-terms", "schedule", "basket", "note-terms", "compound-terms", "variance-terms"]
+      .forEach(refreshSummary);
     wasExotic = true;
     selectEngine();
   } else if (prefillEntry) {
