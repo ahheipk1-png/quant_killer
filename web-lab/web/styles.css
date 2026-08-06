@@ -245,6 +245,11 @@ h1 {
   line-height: 1;
 }
 
+.result-trigger,
+.result-trigger:active {
+  cursor: pointer;
+}
+
 .module-dialog {
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -252,6 +257,10 @@ h1 {
   color: var(--text);
   padding: 26px;
   width: min(480px, calc(100vw - 48px));
+}
+
+.result-dialog {
+  width: min(720px, calc(100vw - 48px));
 }
 
 .module-dialog::backdrop {
@@ -826,6 +835,18 @@ button:disabled {
   margin-bottom: 4px;
 }
 
+.instrument-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.instrument-panel-head .price-button {
+  min-height: 32px;
+  padding: 0 16px;
+  font-size: 0.86rem;
+}
+
 .instrument-eyebrow {
   margin: 0;
   color: var(--muted);
@@ -883,9 +904,6 @@ button:disabled {
 .instrument-panel .result-panel {
   min-height: auto;
   max-width: 900px;
-  margin-top: 22px;
-  padding: 22px 0 0;
-  border-top: 1px solid var(--border);
 }
 
 .instrument-panel .result-list {

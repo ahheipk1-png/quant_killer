@@ -67,7 +67,10 @@
       <article class="instrument-panel" data-panel aria-label="Instrument">
         <div class="instrument-panel-head">
           <p class="instrument-eyebrow">Instrument</p>
-          <button type="button" class="instrument-remove" aria-label="Remove this instrument">×</button>
+          <div class="instrument-head-actions">
+            <button type="button" class="price-button" disabled>Loading…</button>
+            <button type="button" class="instrument-remove" aria-label="Remove this instrument">×</button>
+          </div>
         </div>
 
         <div class="engine-line panel-engine-line">
@@ -97,6 +100,10 @@
                 Model
               </span>
               <span class="module-trigger-summary"></span>
+            </button>
+            <button type="button" class="module-trigger result-trigger" data-module="result">
+              <span class="module-trigger-label">Result</span>
+              <span class="module-trigger-summary">—</span>
             </button>
           </div>
 
@@ -245,9 +252,6 @@
             </div>
           </dialog>
 
-          <div class="form-footer">
-            <button type="submit" class="price-button" disabled>Loading engine…</button>
-          </div>
           <p class="form-error" role="alert"></p>
 
           <div class="verify-links">
@@ -256,79 +260,85 @@
             <a href="polyglot-conformance.html" target="_blank" rel="noopener">Four-language conformance</a>
             <a href="payoff-tests.html" target="_blank" rel="noopener">Test report</a>
           </div>
+
+          <dialog class="module-dialog result-dialog" data-module="result">
+            <h3>Estimated option value</h3>
+            <div class="result-panel">
+              <p class="price-output price">—</p>
+              <p class="error-output standard-error">—</p>
+              <dl class="result-list">
+                <div class="result-row">
+                  <dt>Pricing method</dt>
+                  <dd class="method-output">-</dd>
+                </div>
+                <div class="result-row">
+                  <dt>Exercise style</dt>
+                  <dd class="exercise-output">—</dd>
+                </div>
+                <div class="result-row">
+                  <dt>Pricing engine</dt>
+                  <dd class="engine-output">—</dd>
+                </div>
+                <div class="interval-row result-row" hidden>
+                  <dt>95% confidence interval</dt>
+                  <dd class="interval-output">—</dd>
+                </div>
+                <div class="std-row result-row" hidden>
+                  <dt>Estimator std. deviation</dt>
+                  <dd class="std-output">—</dd>
+                </div>
+                <div class="sampling-row result-row" hidden>
+                  <dt>Sampling</dt>
+                  <dd class="sampling-output">—</dd>
+                </div>
+                <div class="variance-row result-row" hidden>
+                  <dt>Variance control</dt>
+                  <dd class="variance-output">—</dd>
+                </div>
+                <div class="result-row">
+                  <dt>Payoff function</dt>
+                  <dd class="payoff-output">—</dd>
+                </div>
+                <div class="result-row">
+                  <dt>Calculation time</dt>
+                  <dd class="runtime-output">—</dd>
+                </div>
+                <div class="result-row">
+                  <dt>Workload</dt>
+                  <dd class="workload-output">—</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="distribution-panel" aria-label="Monte Carlo distributions" hidden>
+              <div class="distribution-heading">
+                <div>
+                  <p class="eyebrow">Monte Carlo diagnostics</p>
+                  <h2>Distribution and payoff</h2>
+                </div>
+                <p class="distribution-note">Representative sample of up to 5,000 terminal draws.</p>
+              </div>
+              <div class="chart-grid">
+                <figure class="chart-card">
+                  <figcaption>Terminal price distribution</figcaption>
+                  <canvas class="terminal-chart" role="img" aria-label="Histogram of simulated terminal prices"></canvas>
+                </figure>
+                <figure class="chart-card">
+                  <figcaption>Payoff distribution at maturity</figcaption>
+                  <canvas class="payoff-chart" role="img" aria-label="Histogram of simulated option payoffs"></canvas>
+                </figure>
+                <figure class="chart-card">
+                  <figcaption class="payoff-chart-title">European call payoff function</figcaption>
+                  <canvas class="payoff-function-chart" role="img" aria-label="European option payoff function"></canvas>
+                </figure>
+              </div>
+            </div>
+
+            <div class="dialog-actions">
+              <button type="button" class="dialog-close">Close</button>
+            </div>
+          </dialog>
         </form>
-
-        <div class="result-panel" hidden>
-          <h2>Estimated option value</h2>
-          <p class="price-output price">—</p>
-          <p class="error-output standard-error">—</p>
-          <dl class="result-list">
-            <div class="result-row">
-              <dt>Pricing method</dt>
-              <dd class="method-output">-</dd>
-            </div>
-            <div class="result-row">
-              <dt>Exercise style</dt>
-              <dd class="exercise-output">—</dd>
-            </div>
-            <div class="result-row">
-              <dt>Pricing engine</dt>
-              <dd class="engine-output">—</dd>
-            </div>
-            <div class="interval-row result-row" hidden>
-              <dt>95% confidence interval</dt>
-              <dd class="interval-output">—</dd>
-            </div>
-            <div class="std-row result-row" hidden>
-              <dt>Estimator std. deviation</dt>
-              <dd class="std-output">—</dd>
-            </div>
-            <div class="sampling-row result-row" hidden>
-              <dt>Sampling</dt>
-              <dd class="sampling-output">—</dd>
-            </div>
-            <div class="variance-row result-row" hidden>
-              <dt>Variance control</dt>
-              <dd class="variance-output">—</dd>
-            </div>
-            <div class="result-row">
-              <dt>Payoff function</dt>
-              <dd class="payoff-output">—</dd>
-            </div>
-            <div class="result-row">
-              <dt>Calculation time</dt>
-              <dd class="runtime-output">—</dd>
-            </div>
-            <div class="result-row">
-              <dt>Workload</dt>
-              <dd class="workload-output">—</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div class="distribution-panel" aria-label="Monte Carlo distributions" hidden>
-          <div class="distribution-heading">
-            <div>
-              <p class="eyebrow">Monte Carlo diagnostics</p>
-              <h2>Distribution and payoff</h2>
-            </div>
-            <p class="distribution-note">Representative sample of up to 5,000 terminal draws.</p>
-          </div>
-          <div class="chart-grid">
-            <figure class="chart-card">
-              <figcaption>Terminal price distribution</figcaption>
-              <canvas class="terminal-chart" role="img" aria-label="Histogram of simulated terminal prices"></canvas>
-            </figure>
-            <figure class="chart-card">
-              <figcaption>Payoff distribution at maturity</figcaption>
-              <canvas class="payoff-chart" role="img" aria-label="Histogram of simulated option payoffs"></canvas>
-            </figure>
-            <figure class="chart-card">
-              <figcaption class="payoff-chart-title">European call payoff function</figcaption>
-              <canvas class="payoff-function-chart" role="img" aria-label="European option payoff function"></canvas>
-            </figure>
-          </div>
-        </div>
       </article>
     </template>
   </body>

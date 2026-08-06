@@ -476,8 +476,9 @@ function createInstrumentPanel(prefillEntry) {
   const priceButton = root.querySelector(".price-button");
   const statusElement = root.querySelector(".engine-status");
   const errorElement = root.querySelector(".form-error");
-  const resultPanel = root.querySelector(".result-panel");
   const distributionPanel = root.querySelector(".distribution-panel");
+  const resultTrigger = root.querySelector('.module-trigger[data-module="result"]');
+  const resultDialog = root.querySelector('.module-dialog[data-module="result"]');
   const sourceLink = root.querySelector(".verify-source-link");
   const engineSelect = root.querySelector('[name="engine"]');
   const methodSelect = root.querySelector('[name="method"]');
@@ -524,12 +525,13 @@ function createInstrumentPanel(prefillEntry) {
       summarizeModule(root, module);
   }
 
+  function setResultSummary(text) {
+    resultTrigger.querySelector(".module-trigger-summary").textContent = text;
+  }
+
   function setBusy(isBusy) {
-    const engine = engines[engineSelect.value];
     priceButton.disabled = isBusy || !engineReady;
-    priceButton.textContent = isBusy
-      ? `Calculating with ${engine.label}...`
-      : `Calculate with ${engine.label}`;
+    priceButton.textContent = isBusy ? "Calculating…" : "Calculate";
   }
 
   function updateMethodFields() {
@@ -541,7 +543,7 @@ function createInstrumentPanel(prefillEntry) {
         control.disabled = !visible;
       });
     });
-    resultPanel.hidden = true;
+    setResultSummary("—");
     distributionPanel.hidden = true;
     latestDistribution = undefined;
     errorElement.textContent = "";
@@ -582,7 +584,7 @@ function createInstrumentPanel(prefillEntry) {
     errorElement.textContent = message;
     setEngineStatus("Engine load failed", "error");
     priceButton.disabled = false;
-    priceButton.textContent = `Retry ${engines[engineSelect.value].label} engine`;
+    priceButton.textContent = "Retry";
   }
 
   function renderDistribution() {
@@ -678,7 +680,7 @@ function createInstrumentPanel(prefillEntry) {
     engineOutput.textContent = engine.detail;
     methodOutput.textContent = methods[inputs.method].label;
     exerciseOutput.textContent = inputs.exerciseStyle === "american" ? "American" : "European";
-    resultPanel.hidden = false;
+    setResultSummary(formatNumber(message.price, 4));
     addHistoryEntry(inputs, engineSelect.value, message);
 
     if (isMonteCarlo && inputs.includeDistribution && message.distribution) {
@@ -687,7 +689,8 @@ function createInstrumentPanel(prefillEntry) {
         ? "European call payoff function"
         : "European put payoff function";
       distributionPanel.hidden = false;
-      window.requestAnimationFrame(renderDistribution);
+      // Canvases inside the (still-closed) result dialog have zero layout
+      // size right now -- the real draw happens once the dialog opens.
     } else {
       latestDistribution = undefined;
       distributionPanel.hidden = true;
@@ -702,7 +705,7 @@ function createInstrumentPanel(prefillEntry) {
     const engine = engines[engineSelect.value];
     clearEngineLoadTimer();
     errorElement.textContent = "";
-    resultPanel.hidden = true;
+    setResultSummary("—");
     distributionPanel.hidden = true;
     latestDistribution = undefined;
     engineReady = false;
@@ -714,7 +717,7 @@ function createInstrumentPanel(prefillEntry) {
     }
 
     priceButton.disabled = true;
-    priceButton.textContent = `Loading ${engine.label} engine...`;
+    priceButton.textContent = "Loading…";
     setEngineStatus(`Loading ${engine.detail}...`, "working");
     engineLoadStartedAt = performance.now();
     worker = new Worker(engine.workerUrl, { type: engine.workerType });
@@ -789,7 +792,6 @@ function createInstrumentPanel(prefillEntry) {
 
     requestId += 1;
     pendingInputs = inputs;
-    resultPanel.hidden = true;
     distributionPanel.hidden = true;
     latestDistribution = undefined;
     setBusy(true);
@@ -801,7 +803,7 @@ function createInstrumentPanel(prefillEntry) {
   });
 
   window.addEventListener("resize", () => {
-    if (!latestDistribution || distributionPanel.hidden) return;
+    if (!latestDistribution || distributionPanel.hidden || !resultDialog.open) return;
     window.cancelAnimationFrame(resizeFrame);
     resizeFrame = window.requestAnimationFrame(renderDistribution);
   });
@@ -851,6 +853,16 @@ function createInstrumentPanel(prefillEntry) {
   }
 
   ["contractual", "asset", "model"].forEach(wireModuleDialog);
+
+  priceButton.addEventListener("click", () => form.requestSubmit());
+  resultTrigger.addEventListener("click", () => {
+    resultDialog.showModal();
+    if (latestDistribution) window.requestAnimationFrame(renderDistribution);
+  });
+  resultDialog.querySelector(".dialog-close").addEventListener("click", () => resultDialog.close());
+  resultDialog.addEventListener("click", (event) => {
+    if (event.target === resultDialog) resultDialog.close();
+  });
 
   removeButton.addEventListener("click", () => {
     if (worker) worker.terminate();
@@ -958,7 +970,7 @@ instrumentsList.addEventListener("dragstart", (event) => {
 
 instrumentsList.addEventListener("dragover", (event) => {
   const trigger = event.target.closest(".module-trigger");
-  if (!trigger) return;
+  if (!trigger || trigger.dataset.module === "result") return;
   event.preventDefault();
   event.dataTransfer.dropEffect = "copy";
   trigger.classList.add("drag-target");
