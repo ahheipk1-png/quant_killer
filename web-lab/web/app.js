@@ -1194,6 +1194,8 @@ function createInstrumentPanel(prefillEntry) {
     updateExoticMethodOptions,
     updateExoticMethodFields,
     updatePayoffVisibility,
+    renderExoticVolatilityFields,
+    updateExoticScheduleFields,
     refreshSummary,
   };
   panels.set(panelId, control);
@@ -1282,11 +1284,29 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
   const targetDialog = targetRoot.querySelector(`.module-dialog[data-module="${module}"]`);
   if (!sourceDialog || !targetDialog) return;
 
-  const sourceFields = [...sourceDialog.querySelectorAll("input, select")];
-  const targetFields = [...targetDialog.querySelectorAll("input, select")];
-  sourceFields.forEach((sourceField, index) => {
-    const targetField = targetFields[index];
+  const targetControl = panels.get(targetRoot.dataset.panel);
+  if (!targetControl) return;
+
+  // Name-based, not positional: source and target dialogs can render
+  // different field sets once payoff type diverges (e.g. dragging "Model"
+  // from a vanilla instrument onto an exotic one), so index-matching would
+  // silently assign values to the wrong fields.
+  [...sourceDialog.querySelectorAll("input, select")].forEach((sourceField) => {
+    if (!sourceField.name) return;
+    // Radios share one `name` across every choice in the group --
+    // `[name="x"]` alone always resolves to the same (first) radio no
+    // matter which one fired, silently corrupting the target's selection.
+    // Match on name+value so each source radio maps to its own target.
+    const targetField = sourceField.type === "radio"
+      ? targetDialog.querySelector(`input[name="${sourceField.name}"][value="${sourceField.value}"]`)
+      : targetDialog.querySelector(`[name="${sourceField.name}"]`);
     if (!targetField) return;
+    // A select whose source value has no matching <option> on the target
+    // (e.g. an exotic-only method name, or the "js" engine when the target
+    // is still vanilla) can't accept it -- leave the target's own value.
+    if (targetField.tagName === "SELECT" && ![...targetField.options].some((o) => o.value === sourceField.value)) {
+      return;
+    }
     if (sourceField.type === "checkbox" || sourceField.type === "radio") {
       targetField.checked = sourceField.checked;
     } else {
@@ -1294,17 +1314,27 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
     }
   });
 
-  const targetControl = panels.get(targetRoot.dataset.panel);
-  if (!targetControl) return;
   if (module === "contractual") {
-    targetControl.updateMethodOptions();
+    // payoffType is itself a field in this dialog, so a copy can change
+    // the target's payoff type -- cascade exactly like a manual edit would
+    // (toolbar buttons, engine table, method list, exerciseStyle sync).
+    targetControl.updatePayoffVisibility();
   } else if (module === "model") {
     const sourceEngine = sourceDialog.querySelector('[name="engine"]')?.value;
-    if (sourceEngine && targetControl.engineSelect.value !== sourceEngine) {
+    const engineIsValidForTarget = sourceEngine
+      && [...targetControl.engineSelect.options].some((option) => option.value === sourceEngine);
+    if (engineIsValidForTarget && targetControl.engineSelect.value !== sourceEngine) {
       targetControl.engineSelect.value = sourceEngine;
       targetControl.selectEngine();
     }
-    targetControl.updateMethodFields();
+    if (isExoticPayoff(targetControl.payoffTypeSelect.value)) {
+      targetControl.renderExoticVolatilityFields();
+      targetControl.updateExoticMethodOptions();
+    } else {
+      targetControl.updateMethodFields();
+    }
+  } else if (module === "schedule") {
+    targetControl.updateExoticScheduleFields();
   }
   targetControl.refreshSummary(module);
 }
