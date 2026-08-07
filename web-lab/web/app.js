@@ -547,6 +547,8 @@ function createInstrumentPanel(prefillEntry) {
   const assetCountInput = root.querySelector('[name="assetCount"]');
   const basketAssetsList = root.querySelector('[data-basket-assets]');
   const basketAddAssetButton = root.querySelector('.basket-add-asset');
+  const observationDatesList = root.querySelector('[data-observation-dates]');
+  const ladderRungsList = root.querySelector('[data-ladder-rungs]');
 
   const priceOutput = root.querySelector(".price-output");
   const errorOutput = root.querySelector(".error-output");
@@ -711,6 +713,49 @@ function createInstrumentPanel(prefillEntry) {
     }
   }
 
+  // Generic single-value add/remove row list -- used for ladderRungs and
+  // observationDates, which (unlike basket assets) have no natural upper
+  // bound and no "count" field driving them; the user just adds/removes
+  // rows directly. Always keeps at least one row.
+  function createDynamicListRow(inputAttrs, removeLabel) {
+    const row = document.createElement("div");
+    row.className = "dynamic-list-row";
+    const input = document.createElement("input");
+    Object.entries(inputAttrs).forEach(([key, value]) => input.setAttribute(key, value));
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "dynamic-list-remove";
+    removeButton.setAttribute("aria-label", removeLabel);
+    removeButton.textContent = "×";
+    row.append(input, removeButton);
+    return row;
+  }
+
+  function wireDynamicList(listElement, addButton, inputAttrs, removeLabel) {
+    addButton.addEventListener("click", () => {
+      listElement.append(createDynamicListRow(inputAttrs, removeLabel));
+    });
+    listElement.addEventListener("click", (event) => {
+      const removeButton = event.target.closest(".dynamic-list-remove");
+      if (!removeButton || listElement.children.length <= 1) return;
+      removeButton.closest(".dynamic-list-row").remove();
+    });
+  }
+
+  // Grows/shrinks a dynamic list to `targetLength` rows, cloning the row
+  // shape from its own first row -- used by copyModuleValues to match the
+  // dragged-from panel's row count before copying values in by index.
+  function syncDynamicListLength(listElement, targetLength) {
+    const template = listElement.firstElementChild;
+    if (!template) return;
+    while (listElement.children.length < Math.max(1, targetLength)) {
+      listElement.append(template.cloneNode(true));
+    }
+    while (listElement.children.length > Math.max(1, targetLength)) {
+      listElement.lastElementChild.remove();
+    }
+  }
+
   function updateExoticScheduleFields() {
     const scheduleDialog = root.querySelector('.module-dialog[data-module="contractual"]');
     const mode = scheduleModeSelect.value;
@@ -725,7 +770,7 @@ function createInstrumentPanel(prefillEntry) {
     scheduleDialog.querySelector('[name="valuationDate"]').closest(".field").hidden = mode === "equal";
     scheduleDialog.querySelector('[name="endDate"]').closest(".field").hidden = mode === "equal";
     scheduleDialog.querySelector('[name="holidayCalendar"]').closest(".field").hidden = mode !== "business-monthly";
-    scheduleDialog.querySelector('[name="observationDates"]').closest(".field").hidden = mode !== "custom";
+    observationDatesList.closest(".dynamic-list-group").hidden = mode !== "custom";
   }
 
   function updateExoticMethodFields() {
@@ -844,7 +889,17 @@ function createInstrumentPanel(prefillEntry) {
     data.randomizedQmc = Boolean(form.elements.randomizedQmc?.checked);
     data.includeInitialFixing = Boolean(form.elements.includeInitialFixing?.checked);
     data.memoryCoupon = form.elements.memoryCoupon ? form.elements.memoryCoupon.checked : true;
-    data.ladderRungs = String(data.ladderRungs || "110,120,130").split(",").map(Number).filter(Number.isFinite);
+    data.observationDates = [...observationDatesList.querySelectorAll('[name="observationDate"]')]
+      .map((el) => el.value).filter(Boolean);
+    data.ladderRungs = [...ladderRungsList.querySelectorAll('[name="ladderRung"]')]
+      .map((el) => Number(el.value)).filter(Number.isFinite);
+    if (data.product === "ladder" && ["cpp", "rust", "csharp"].includes(engineSelect.value)
+      && data.ladderRungs.length > 3) {
+      throw new Error(
+        `${engineTable()[engineSelect.value].label} supports at most 3 ladder rungs today -- `
+        + "switch to JavaScript or Python, or remove rungs down to 3.",
+      );
+    }
     data.basketWeights = String(data.basketWeights || "0.5,0.3,0.2").split(",").map(Number).filter(Number.isFinite);
     if (data.product === "rainbow" || data.product === "himalayan") {
       const assetCount = Math.max(2, Math.min(20, Math.trunc(Number(data.assetCount)) || 2));
@@ -1243,16 +1298,25 @@ function createInstrumentPanel(prefillEntry) {
     assetCountInput.value = basketAssetsList.children.length + 1;
   });
 
+  wireDynamicList(
+    observationDatesList, root.querySelector('[data-add="observationDate"]'),
+    { name: "observationDate", type: "date", value: "2026-09-01" }, "Remove this date",
+  );
+  wireDynamicList(
+    ladderRungsList, root.querySelector('[data-add="ladderRung"]'),
+    { name: "ladderRung", type: "number", min: "0.0001", step: "any", value: "100" }, "Remove this rung",
+  );
+
   function wireModuleDialog(module, onRestore) {
     const trigger = root.querySelector(`.module-trigger[data-module="${module}"]`);
     const dialog = root.querySelector(`.module-dialog[data-module="${module}"]`);
-    // Dynamic basket-asset rows are add/removeable mid-edit, so they can't
-    // be snapshotted/restored by fixed DOM position like every other field
-    // here -- excluded from this generic list and handled separately below
-    // (innerHTML snapshot of the whole row container) wherever this module
-    // actually contains that container.
+    // Dynamic add/remove rows (basket assets, ladder rungs, custom dates)
+    // can't be snapshotted/restored by fixed DOM position like every other
+    // field here -- excluded from this generic list and handled separately
+    // below (innerHTML snapshot of the whole row container) wherever this
+    // module actually contains one.
     const fields = () => [...dialog.querySelectorAll("input, select")]
-      .filter((field) => !field.closest("[data-basket-assets]"));
+      .filter((field) => !field.closest("[data-dynamic-list]"));
     let snapshot = null;
 
     function restore() {
@@ -1306,18 +1370,19 @@ function createInstrumentPanel(prefillEntry) {
   {
     const contractualDialog = root.querySelector('.module-dialog[data-module="contractual"]');
     const contractualTrigger = root.querySelector('.module-trigger[data-module="contractual"]');
-    let basketSnapshot = null;
+    const dynamicLists = [...contractualDialog.querySelectorAll("[data-dynamic-list]")];
+    let dynamicListSnapshots = null;
     contractualTrigger.addEventListener("click", () => {
-      basketSnapshot = basketAssetsList.innerHTML;
+      dynamicListSnapshots = dynamicLists.map((list) => list.innerHTML);
     });
-    function restoreBasketAssets() {
-      if (basketSnapshot === null) return;
-      basketAssetsList.innerHTML = basketSnapshot;
+    function restoreDynamicLists() {
+      if (dynamicListSnapshots === null) return;
+      dynamicLists.forEach((list, index) => { list.innerHTML = dynamicListSnapshots[index]; });
     }
-    contractualDialog.querySelector(".dialog-cancel").addEventListener("click", restoreBasketAssets);
-    contractualDialog.addEventListener("cancel", restoreBasketAssets);
+    contractualDialog.querySelector(".dialog-cancel").addEventListener("click", restoreDynamicLists);
+    contractualDialog.addEventListener("cancel", restoreDynamicLists);
     contractualDialog.addEventListener("click", (event) => {
-      if (event.target === contractualDialog) restoreBasketAssets();
+      if (event.target === contractualDialog) restoreDynamicLists();
     });
   }
 
@@ -1355,6 +1420,9 @@ function createInstrumentPanel(prefillEntry) {
     updateExoticScheduleFields,
     renderBasketAssetRows,
     basketAssetsList,
+    observationDatesList,
+    ladderRungsList,
+    syncDynamicListLength,
     refreshSummary,
   };
   panels.set(panelId, control);
@@ -1397,6 +1465,22 @@ function createInstrumentPanel(prefillEntry) {
       });
       (prefillEntry.inputs.assetDividendYields || []).forEach((value, index) => {
         if (divInputs[index]) divInputs[index].value = Number(value) * 100;
+      });
+    }
+    // observationDates/ladderRungs have the same "array, no single matching
+    // form.elements name" problem as the basket arrays above.
+    if (Array.isArray(prefillEntry.inputs.observationDates) && prefillEntry.inputs.observationDates.length) {
+      syncDynamicListLength(observationDatesList, prefillEntry.inputs.observationDates.length);
+      const dateInputs = [...observationDatesList.querySelectorAll('[name="observationDate"]')];
+      prefillEntry.inputs.observationDates.forEach((value, index) => {
+        if (dateInputs[index]) dateInputs[index].value = value;
+      });
+    }
+    if (Array.isArray(prefillEntry.inputs.ladderRungs) && prefillEntry.inputs.ladderRungs.length) {
+      syncDynamicListLength(ladderRungsList, prefillEntry.inputs.ladderRungs.length);
+      const rungInputs = [...ladderRungsList.querySelectorAll('[name="ladderRung"]')];
+      prefillEntry.inputs.ladderRungs.forEach((value, index) => {
+        if (rungInputs[index]) rungInputs[index].value = value;
       });
     }
     engineSelect.value = prefillEntry.engineKey;
@@ -1468,12 +1552,13 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
   // Name-based, not positional: source and target dialogs can render
   // different field sets once payoff type diverges (e.g. dragging "Model"
   // from a vanilla instrument onto an exotic one), so index-matching would
-  // silently assign values to the wrong fields. Basket-asset rows are the
-  // one genuine exception -- excluded here and copied by row index below,
-  // since `[name="assetSpot"]` alone always resolves to the target's FIRST
-  // row regardless of which source row it came from.
+  // silently assign values to the wrong fields. Dynamic-list rows (basket
+  // assets, ladder rungs, custom dates) are the one genuine exception --
+  // excluded here and copied by row index below, since e.g.
+  // `[name="assetSpot"]` alone always resolves to the target's FIRST row
+  // regardless of which source row it came from.
   [...sourceDialog.querySelectorAll("input, select")].forEach((sourceField) => {
-    if (!sourceField.name || sourceField.closest("[data-basket-assets]")) return;
+    if (!sourceField.name || sourceField.closest("[data-dynamic-list]")) return;
     // Radios share one `name` across every choice in the group --
     // `[name="x"]` alone always resolves to the same (first) radio no
     // matter which one fired, silently corrupting the target's selection.
@@ -1513,6 +1598,17 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
         });
       });
     }
+    [
+      ["[data-observation-dates]", "observationDate", targetControl.observationDatesList],
+      ["[data-ladder-rungs]", "ladderRung", targetControl.ladderRungsList],
+    ].forEach(([sourceSelector, name, targetList]) => {
+      const sourceInputs = [...sourceDialog.querySelectorAll(`${sourceSelector} [name="${name}"]`)];
+      targetControl.syncDynamicListLength(targetList, sourceInputs.length);
+      const targetInputs = [...targetList.querySelectorAll(`[name="${name}"]`)];
+      sourceInputs.forEach((sourceInput, index) => {
+        if (targetInputs[index]) targetInputs[index].value = sourceInput.value;
+      });
+    });
   } else if (module === "model") {
     // engine now lives in the instrument header, not the Model dialog.
     const sourceRoot = document.querySelector(`[data-panel="${sourcePanelId}"]`);

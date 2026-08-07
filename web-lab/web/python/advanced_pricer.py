@@ -245,7 +245,7 @@ def _phoenix_pv(p, path, schedule, allow_autocall):
     return present + math.exp(-p[4] * p[13]) * redemption
 
 
-def _path_value(p, paths, underlying, log_returns, schedule, extra):
+def _path_value(p, paths, underlying, log_returns, schedule, extra, ladder_rungs):
     product = int(p[0])
     terminal = underlying[-1]
     discount = math.exp(-p[4] * p[13])
@@ -299,7 +299,7 @@ def _path_value(p, paths, underlying, log_returns, schedule, extra):
         return discount * vanilla_payoff(extremum, p[3], is_call)
     if product == 8:
         locked = 0.0
-        rungs = [p[37], p[38], p[39]][:int(p[40])]
+        rungs = list(ladder_rungs) if ladder_rungs is not None else [p[37], p[38], p[39]][:int(p[40])]
         for value in underlying:
             for rung in rungs:
                 if is_call and value >= rung:
@@ -396,9 +396,10 @@ def _bermudan_price(p, schedule, path_count, rng):
             for index in range(path_count)]
 
 
-def price_advanced(parameters, paths, seed, extra_assets=None):
+def price_advanced(parameters, paths, seed, extra_assets=None, ladder_rungs=None):
     p = [float(value) for value in parameters]
     extra = list(extra_assets) if extra_assets is not None else None
+    rungs = list(ladder_rungs) if ladder_rungs is not None else None
     path_count = max(100, int(paths))
     count = max(1, min(int(p[15]), 260))
     schedule = [p[HEADER_SIZE + index] for index in range(count)]
@@ -409,7 +410,7 @@ def price_advanced(parameters, paths, seed, extra_assets=None):
         samples = []
         for _ in range(path_count):
             raw_paths, underlying, log_returns = _simulate_path(p, schedule, rng, extra)
-            samples.append(_path_value(p, raw_paths, underlying, log_returns, schedule, extra))
+            samples.append(_path_value(p, raw_paths, underlying, log_returns, schedule, extra, rungs))
     mean = sum(samples) / path_count
     variance = sum((value - mean) ** 2 for value in samples) / max(path_count - 1, 1)
     standard_deviation = math.sqrt(max(variance, 0.0))

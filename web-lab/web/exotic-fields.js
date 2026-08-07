@@ -51,7 +51,7 @@
       note: "Native C++ path engine: every listed payoff and volatility model through seeded Monte Carlo." },
     rust: { label: "Rust", detail: "Rust / WebAssembly", url: "advanced-rust-worker.js?v=2", type: "classic", timeout: 10000,
       note: "Native Rust path engine: every listed payoff and volatility model through seeded Monte Carlo." },
-    python: { label: "Python", detail: "Python / Pyodide", url: "advanced-python-worker.mjs?v=3", type: "module", timeout: 45000,
+    python: { label: "Python", detail: "Python / Pyodide", url: "advanced-python-worker.mjs?v=5", type: "module", timeout: 45000,
       note: "Python runs inside Pyodide. Its first load is larger; later runs reuse the loaded worker." },
     csharp: { label: "C#", detail: "C# / .NET WebAssembly", url: "advanced-csharp-worker.mjs?v=2", type: "module", timeout: 45000,
       note: "C# runs in the browser's .NET WebAssembly runtime. Its first load is larger than C++ or Rust." },
@@ -313,7 +313,11 @@
         if (date < end) dates.push(date);
       }
     } else {
-      dates = String(data.observationDates || "").split(",").map((value) => value.trim()).filter(Boolean).map(utcDate);
+      // index.html's dynamic date-row list sends an array directly;
+      // exotics.html's single comma-separated text field still sends a string.
+      dates = Array.isArray(data.observationDates)
+        ? data.observationDates.filter(Boolean).map(utcDate)
+        : String(data.observationDates || "").split(",").map((value) => value.trim()).filter(Boolean).map(utcDate);
     }
     const times = dates.map((date) => (date - start) / (365 * 86400000))
       .filter((time) => time > 0 && time < maturity - 1e-10).sort((a, b) => a - b);

@@ -355,6 +355,79 @@ h1 {
   display: none;
 }
 
+.dynamic-list-group {
+  display: block;
+  grid-column: 1 / -1;
+}
+
+.dynamic-list-group[hidden] {
+  display: none;
+}
+
+.dynamic-list-label {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+
+.dynamic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dynamic-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dynamic-list-row input {
+  flex: 1;
+}
+
+.dynamic-list-remove {
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--muted);
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.dynamic-list-remove:hover {
+  background: rgba(255, 139, 139, 0.18);
+  color: var(--danger);
+}
+
+.dynamic-list-add {
+  margin-top: 10px;
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+}
+
+.dynamic-list-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: none;
+}
+
+.dynamic-list-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .basket-assets-group {
   display: block;
   margin-top: 18px;

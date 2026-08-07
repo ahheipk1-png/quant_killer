@@ -37,17 +37,34 @@ function extraAssetsFor(config) {
   return extra;
 }
 
+// Same reasoning as extraAssetsFor: ladder rungs are arbitrary-length in the
+// JS reference engine, but the packed `parameters` header only has 3 fixed
+// rung slots (shared with the C++/Rust/C# engines) -- so Python gets them
+// as their own flat list instead of reading the packed header's rungs.
+function ladderRungsFor(config) {
+  if (config.product !== "ladder" || !Array.isArray(config.ladderRungs)) return null;
+  return config.ladderRungs.map(Number);
+}
+
 self.addEventListener("message", (event) => {
   if (event.data.type !== "price" || !priceAdvanced) return;
   const { requestId, parameters, paths, seed, config, method } = event.data;
   const started = performance.now();
   let pythonParameters;
   let extraAssets;
+  let ladderRungs;
   let result;
   try {
     pythonParameters = pyodide.toPy(Array.from(parameters));
-    extraAssets = pyodide.toPy(extraAssetsFor(config));
-    result = priceAdvanced(pythonParameters, paths, seed, extraAssets);
+    // pyodide.toPy(null) produces a "JsNull" wrapper object, not Python
+    // None, which broke `is not None` checks on the Python side for every
+    // product that doesn't need these -- pass plain `undefined` instead so
+    // Pyodide's argument marshaling maps it to the Python default (None).
+    const extra = extraAssetsFor(config);
+    const rungs = ladderRungsFor(config);
+    extraAssets = extra === null ? undefined : pyodide.toPy(extra);
+    ladderRungs = rungs === null ? undefined : pyodide.toPy(rungs);
+    result = priceAdvanced(pythonParameters, paths, seed, extraAssets, ladderRungs);
     const [price, standardError, standardDeviation] = result.toJs();
     postMessage({
       type: "result", requestId,
@@ -61,6 +78,7 @@ self.addEventListener("message", (event) => {
   } finally {
     pythonParameters?.destroy?.();
     extraAssets?.destroy?.();
+    ladderRungs?.destroy?.();
     result?.destroy?.();
   }
 });

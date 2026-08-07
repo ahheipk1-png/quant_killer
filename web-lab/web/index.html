@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="exotics.css">
     <script src="polyglot-contract.js" defer></script>
     <script src="holiday-calendars.js?v=1" defer></script>
-    <script src="exotic-fields.js?v=3" defer></script>
-    <script src="app.js?v=15" defer></script>
+    <script src="exotic-fields.js?v=5" defer></script>
+    <script src="app.js?v=16" defer></script>
   </head>
   <body>
     <main class="page-shell">
@@ -251,14 +251,50 @@
                   <option value="hk">Hong Kong — HKEX (fixed-date holidays only)</option>
                 </select>
               </label>
-              <label class="field" hidden>
-                Custom dates · comma separated
-                <input name="observationDates" type="text" value="2026-09-01, 2026-10-15, 2027-01-04, 2027-08-02">
-              </label>
-              <label class="field" data-payoff-only="ladder" hidden>
-                Ladder rungs · comma separated
-                <input name="ladderRungs" type="text" value="110,120,130" disabled>
-              </label>
+              <div class="dynamic-list-group" hidden>
+                <p class="dynamic-list-label">Custom dates</p>
+                <div class="dynamic-list" data-observation-dates data-dynamic-list>
+                  <div class="dynamic-list-row">
+                    <input name="observationDate" type="date" value="2026-09-01">
+                    <button type="button" class="dynamic-list-remove" aria-label="Remove this date">×</button>
+                  </div>
+                  <div class="dynamic-list-row">
+                    <input name="observationDate" type="date" value="2026-10-15">
+                    <button type="button" class="dynamic-list-remove" aria-label="Remove this date">×</button>
+                  </div>
+                  <div class="dynamic-list-row">
+                    <input name="observationDate" type="date" value="2027-01-04">
+                    <button type="button" class="dynamic-list-remove" aria-label="Remove this date">×</button>
+                  </div>
+                  <div class="dynamic-list-row">
+                    <input name="observationDate" type="date" value="2027-08-02">
+                    <button type="button" class="dynamic-list-remove" aria-label="Remove this date">×</button>
+                  </div>
+                </div>
+                <button type="button" class="dynamic-list-add" data-add="observationDate">+ Add date</button>
+              </div>
+              <div class="dynamic-list-group" data-payoff-only="ladder" hidden>
+                <p class="dynamic-list-label">Ladder rungs</p>
+                <div class="dynamic-list" data-ladder-rungs data-dynamic-list>
+                  <div class="dynamic-list-row">
+                    <input name="ladderRung" type="number" min="0.0001" step="any" value="110">
+                    <button type="button" class="dynamic-list-remove" aria-label="Remove this rung">×</button>
+                  </div>
+                  <div class="dynamic-list-row">
+                    <input name="ladderRung" type="number" min="0.0001" step="any" value="120">
+                    <button type="button" class="dynamic-list-remove" aria-label="Remove this rung">×</button>
+                  </div>
+                  <div class="dynamic-list-row">
+                    <input name="ladderRung" type="number" min="0.0001" step="any" value="130">
+                    <button type="button" class="dynamic-list-remove" aria-label="Remove this rung">×</button>
+                  </div>
+                </div>
+                <button type="button" class="dynamic-list-add" data-add="ladderRung">+ Add rung</button>
+                <p class="dynamic-list-note">
+                  Pricing more than 3 rungs on the C++/Rust/C# engines isn't supported yet -- switch
+                  to JavaScript or Python, or remove rungs down to 3.
+                </p>
+              </div>
               <label class="checkbox" data-payoff-only="asian" hidden>
                 <input name="includeInitialFixing" type="checkbox">
                 Include initial spot fixing
@@ -366,7 +402,7 @@
               </label>
             </div>
             <div class="basket-assets-group" data-payoff-only="rainbow,himalayan" hidden>
-              <div class="basket-assets-list" data-basket-assets></div>
+              <div class="basket-assets-list" data-basket-assets data-dynamic-list></div>
               <button type="button" class="basket-add-asset">+ Add asset</button>
               <p class="basket-assets-note">
                 Asset 1 uses the Underlying asset(s) dialog. Pricing more than 3 assets total on
