@@ -34,7 +34,7 @@ select {
 
 .page-shell {
   width: min(1400px, calc(100% - 64px));
-  margin: 0 auto;
+  margin: 0 0 0 32px;
   padding: 48px 0 64px;
 }
 
