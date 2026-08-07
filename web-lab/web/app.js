@@ -544,6 +544,9 @@ function createInstrumentPanel(prefillEntry) {
   const volatilityModelSelect = root.querySelector('[name="volatilityModel"]');
   const optionTypeToggle = root.querySelector('[data-optiontype-toggle]');
   const scheduleModeSelect = root.querySelector('.module-dialog[data-module="contractual"] [name="scheduleMode"]');
+  const assetCountInput = root.querySelector('[name="assetCount"]');
+  const basketAssetsList = root.querySelector('[data-basket-assets]');
+  const basketAddAssetButton = root.querySelector('.basket-add-asset');
 
   const priceOutput = root.querySelector(".price-output");
   const errorOutput = root.querySelector(".error-output");
@@ -656,6 +659,58 @@ function createInstrumentPanel(prefillEntry) {
     container.replaceChildren(...defs.map((def) => ExoticFields.createField(def)));
   }
 
+  // Rainbow/himalayan basket assets beyond the primary (asset 1, which
+  // reuses the Underlying asset(s) dialog) -- rendered as one row per asset
+  // rather than the old fixed spot2/spot3 fields, so the basket size is no
+  // longer capped at 3. Native (cpp/rust/csharp) engines still only read the
+  // fixed 3-asset packed contract -- see readExoticConfig()'s validation.
+  function createBasketAssetRow(index) {
+    const row = document.createElement("div");
+    row.className = "basket-asset-row";
+    row.innerHTML = `
+      <span class="basket-asset-label">Asset ${index}</span>
+      <label class="field">Spot
+        <input name="assetSpot" type="number" min="0.0001" step="any" value="100">
+      </label>
+      <label class="field">Volatility
+        <div class="input-wrap">
+          <input name="assetVolatility" type="number" min="0.01" step="any" value="25" data-transform="percent">
+          <span class="suffix">%</span>
+        </div>
+      </label>
+      <label class="field">Dividend yield
+        <div class="input-wrap">
+          <input name="assetDividendYield" type="number" step="any" value="0" data-transform="percent">
+          <span class="suffix">%</span>
+        </div>
+      </label>
+      <button type="button" class="basket-remove-asset" aria-label="Remove this asset">×</button>
+    `;
+    return row;
+  }
+
+  function renumberBasketAssetRows() {
+    [...basketAssetsList.children].forEach((row, index) => {
+      row.querySelector(".basket-asset-label").textContent = `Asset ${index + 2}`;
+    });
+  }
+
+  // Grows/shrinks the row list to match `count` total assets, preserving
+  // existing rows' values -- switching between rainbow and himalayan (which
+  // share this same container) or re-running on every updatePayoffVisibility
+  // call must never silently discard what the user already typed.
+  function renderBasketAssetRows(count) {
+    const target = Math.max(2, Math.min(20, Math.trunc(Number(count)) || 2)) - 1;
+    const rows = [...basketAssetsList.children];
+    if (rows.length > target) {
+      rows.slice(target).forEach((row) => row.remove());
+    } else {
+      for (let index = rows.length; index < target; index += 1) {
+        basketAssetsList.append(createBasketAssetRow(index + 2));
+      }
+    }
+  }
+
   function updateExoticScheduleFields() {
     const scheduleDialog = root.querySelector('.module-dialog[data-module="contractual"]');
     const mode = scheduleModeSelect.value;
@@ -721,6 +776,13 @@ function createInstrumentPanel(prefillEntry) {
     // second, independently-editable control to fall out of sync with it.
     if (!exotic) exerciseSelect.value = payoffType === "vanilla-american" ? "american" : "european";
 
+    // Rows must exist before the data-payoff-only pass below so it can set
+    // their disabled state correctly (a fresh row created after that pass
+    // would stay enabled-but-hidden, and thus wrongly included in FormData).
+    if (product === "rainbow" || product === "himalayan") {
+      renderBasketAssetRows(assetCountInput.value);
+    }
+
     root.querySelectorAll("[data-payoff-only]").forEach((element) => {
       const keys = element.dataset.payoffOnly.split(",");
       const visible = keys.length === 1 && keys[0] === "vanilla" ? !exotic
@@ -784,6 +846,33 @@ function createInstrumentPanel(prefillEntry) {
     data.memoryCoupon = form.elements.memoryCoupon ? form.elements.memoryCoupon.checked : true;
     data.ladderRungs = String(data.ladderRungs || "110,120,130").split(",").map(Number).filter(Number.isFinite);
     data.basketWeights = String(data.basketWeights || "0.5,0.3,0.2").split(",").map(Number).filter(Number.isFinite);
+    if (data.product === "rainbow" || data.product === "himalayan") {
+      const assetCount = Math.max(2, Math.min(20, Math.trunc(Number(data.assetCount)) || 2));
+      data.assetCount = assetCount;
+      const extraCount = assetCount - 1;
+      data.assetSpots = [...basketAssetsList.querySelectorAll('[name="assetSpot"]')]
+        .slice(0, extraCount).map((el) => Number(el.value));
+      data.assetVolatilities = [...basketAssetsList.querySelectorAll('[name="assetVolatility"]')]
+        .slice(0, extraCount).map((el) => Number(el.value) / 100);
+      data.assetDividendYields = [...basketAssetsList.querySelectorAll('[name="assetDividendYield"]')]
+        .slice(0, extraCount).map((el) => Number(el.value) / 100);
+      // Backward compat for the fixed 3-asset packed contract that
+      // PolyglotContract.pack() sends to the C++/Rust/C# engines -- only
+      // meaningful (and only reachable) when assetCount <= 3, since the
+      // check right below rejects those engines above 3 assets.
+      data.spot2 = data.assetSpots[0] ?? 100;
+      data.volatility2 = data.assetVolatilities[0] ?? 0.25;
+      data.dividendYield2 = data.assetDividendYields[0] ?? 0;
+      data.spot3 = data.assetSpots[1] ?? 100;
+      data.volatility3 = data.assetVolatilities[1] ?? 0.3;
+      data.dividendYield3 = data.assetDividendYields[1] ?? 0;
+      if (["cpp", "rust", "csharp"].includes(engineSelect.value) && assetCount > 3) {
+        throw new Error(
+          `${engineTable()[engineSelect.value].label} supports at most 3 basket assets today -- `
+          + "switch to JavaScript or Python, or remove assets down to 3.",
+        );
+      }
+    }
     data.observationTimes = ExoticFields.buildObservationTimes(data);
     return data;
   }
@@ -1140,10 +1229,30 @@ function createInstrumentPanel(prefillEntry) {
   });
   scheduleModeSelect.addEventListener("change", updateExoticScheduleFields);
 
+  assetCountInput.addEventListener("input", () => renderBasketAssetRows(assetCountInput.value));
+  basketAddAssetButton.addEventListener("click", () => {
+    const nextCount = Math.min(20, basketAssetsList.children.length + 2);
+    assetCountInput.value = nextCount;
+    renderBasketAssetRows(nextCount);
+  });
+  basketAssetsList.addEventListener("click", (event) => {
+    const removeButton = event.target.closest(".basket-remove-asset");
+    if (!removeButton || basketAssetsList.children.length <= 1) return;
+    removeButton.closest(".basket-asset-row").remove();
+    renumberBasketAssetRows();
+    assetCountInput.value = basketAssetsList.children.length + 1;
+  });
+
   function wireModuleDialog(module, onRestore) {
     const trigger = root.querySelector(`.module-trigger[data-module="${module}"]`);
     const dialog = root.querySelector(`.module-dialog[data-module="${module}"]`);
-    const fields = () => [...dialog.querySelectorAll("input, select")];
+    // Dynamic basket-asset rows are add/removeable mid-edit, so they can't
+    // be snapshotted/restored by fixed DOM position like every other field
+    // here -- excluded from this generic list and handled separately below
+    // (innerHTML snapshot of the whole row container) wherever this module
+    // actually contains that container.
+    const fields = () => [...dialog.querySelectorAll("input, select")]
+      .filter((field) => !field.closest("[data-basket-assets]"));
     let snapshot = null;
 
     function restore() {
@@ -1190,6 +1299,28 @@ function createInstrumentPanel(prefillEntry) {
   wireModuleDialog("contractual", updatePayoffVisibility);
   ["asset", "model"].forEach((module) => wireModuleDialog(module));
 
+  // Basket-asset rows: snapshot the whole row container on open, restore it
+  // wholesale on Cancel/Escape/backdrop (see the fields() exclusion above).
+  // Re-captured fresh every open, so a save doesn't need to clear it -- a
+  // later cancel-after-a-failed-save correctly reverts to before that edit.
+  {
+    const contractualDialog = root.querySelector('.module-dialog[data-module="contractual"]');
+    const contractualTrigger = root.querySelector('.module-trigger[data-module="contractual"]');
+    let basketSnapshot = null;
+    contractualTrigger.addEventListener("click", () => {
+      basketSnapshot = basketAssetsList.innerHTML;
+    });
+    function restoreBasketAssets() {
+      if (basketSnapshot === null) return;
+      basketAssetsList.innerHTML = basketSnapshot;
+    }
+    contractualDialog.querySelector(".dialog-cancel").addEventListener("click", restoreBasketAssets);
+    contractualDialog.addEventListener("cancel", restoreBasketAssets);
+    contractualDialog.addEventListener("click", (event) => {
+      if (event.target === contractualDialog) restoreBasketAssets();
+    });
+  }
+
   priceButton.addEventListener("click", () => form.requestSubmit());
   resultTrigger.addEventListener("click", () => {
     resultDialog.showModal();
@@ -1222,6 +1353,8 @@ function createInstrumentPanel(prefillEntry) {
     updatePayoffVisibility,
     renderExoticVolatilityFields,
     updateExoticScheduleFields,
+    renderBasketAssetRows,
+    basketAssetsList,
     refreshSummary,
   };
   panels.set(panelId, control);
@@ -1247,6 +1380,25 @@ function createInstrumentPanel(prefillEntry) {
       else if (percentFields.has(name)) element.value = Number(value) * 100;
       else element.value = Array.isArray(value) ? value.join(",") : value;
     });
+    // assetSpots/assetVolatilities/assetDividendYields have no single
+    // matching form.elements name (they're arrays backing repeated-name
+    // dynamic rows), so the generic loop above silently skips them --
+    // rebuild the row count first, then populate each row explicitly.
+    if (prefillEntry.inputs.product === "rainbow" || prefillEntry.inputs.product === "himalayan") {
+      renderBasketAssetRows(prefillEntry.inputs.assetCount);
+      const spotInputs = [...basketAssetsList.querySelectorAll('[name="assetSpot"]')];
+      const volInputs = [...basketAssetsList.querySelectorAll('[name="assetVolatility"]')];
+      const divInputs = [...basketAssetsList.querySelectorAll('[name="assetDividendYield"]')];
+      (prefillEntry.inputs.assetSpots || []).forEach((value, index) => {
+        if (spotInputs[index]) spotInputs[index].value = value;
+      });
+      (prefillEntry.inputs.assetVolatilities || []).forEach((value, index) => {
+        if (volInputs[index]) volInputs[index].value = Number(value) * 100;
+      });
+      (prefillEntry.inputs.assetDividendYields || []).forEach((value, index) => {
+        if (divInputs[index]) divInputs[index].value = Number(value) * 100;
+      });
+    }
     engineSelect.value = prefillEntry.engineKey;
     updateExoticMethodOptions();
     methodSelect.value = prefillEntry.inputs.method;
@@ -1316,9 +1468,12 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
   // Name-based, not positional: source and target dialogs can render
   // different field sets once payoff type diverges (e.g. dragging "Model"
   // from a vanilla instrument onto an exotic one), so index-matching would
-  // silently assign values to the wrong fields.
+  // silently assign values to the wrong fields. Basket-asset rows are the
+  // one genuine exception -- excluded here and copied by row index below,
+  // since `[name="assetSpot"]` alone always resolves to the target's FIRST
+  // row regardless of which source row it came from.
   [...sourceDialog.querySelectorAll("input, select")].forEach((sourceField) => {
-    if (!sourceField.name) return;
+    if (!sourceField.name || sourceField.closest("[data-basket-assets]")) return;
     // Radios share one `name` across every choice in the group --
     // `[name="x"]` alone always resolves to the same (first) radio no
     // matter which one fired, silently corrupting the target's selection.
@@ -1346,6 +1501,18 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
     // (toolbar buttons, engine table, method list, exerciseStyle sync).
     targetControl.updatePayoffVisibility();
     targetControl.updateExoticScheduleFields();
+    const sourceProduct = sourceDialog.querySelector('[name="payoffType"]')?.value;
+    if (sourceProduct === "rainbow" || sourceProduct === "himalayan") {
+      const sourceAssetCount = sourceDialog.querySelector('[name="assetCount"]').value;
+      targetControl.renderBasketAssetRows(sourceAssetCount);
+      ["assetSpot", "assetVolatility", "assetDividendYield"].forEach((name) => {
+        const sourceInputs = [...sourceDialog.querySelectorAll(`[data-basket-assets] [name="${name}"]`)];
+        const targetInputs = [...targetControl.basketAssetsList.querySelectorAll(`[name="${name}"]`)];
+        sourceInputs.forEach((sourceInput, index) => {
+          if (targetInputs[index]) targetInputs[index].value = sourceInput.value;
+        });
+      });
+    }
   } else if (module === "model") {
     // engine now lives in the instrument header, not the Model dialog.
     const sourceRoot = document.querySelector(`[data-panel="${sourcePanelId}"]`);

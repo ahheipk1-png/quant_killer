@@ -355,6 +355,83 @@ h1 {
   display: none;
 }
 
+.basket-assets-group {
+  display: block;
+  margin-top: 18px;
+}
+
+.basket-assets-group[hidden] {
+  display: none;
+}
+
+.basket-assets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.basket-asset-row {
+  display: grid;
+  grid-template-columns: auto repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.basket-asset-row .basket-asset-label {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.basket-asset-row .field {
+  margin: 0;
+}
+
+.basket-remove-asset {
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--muted);
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.basket-remove-asset:hover {
+  background: rgba(255, 139, 139, 0.18);
+  color: var(--danger);
+}
+
+.basket-add-asset {
+  margin-top: 12px;
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+}
+
+.basket-add-asset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: none;
+}
+
+.basket-assets-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .field {
   display: grid;
   gap: 8px;

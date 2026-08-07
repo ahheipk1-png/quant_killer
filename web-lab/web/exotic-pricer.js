@@ -467,8 +467,8 @@
     return vanillaPayoff(spot, strike, optionType);
   }
 
-  function rainbowPayoff(first, second, strike, optionType, rainbowStyle) {
-    const basket = rainbowStyle === "worst" ? Math.min(first, second) : Math.max(first, second);
+  function rainbowPayoff(terminals, strike, optionType, rainbowStyle) {
+    const basket = rainbowStyle === "worst" ? Math.min(...terminals) : Math.max(...terminals);
     return vanillaPayoff(basket, strike, optionType);
   }
 
@@ -638,6 +638,14 @@
     return correlated;
   }
 
+  // Assets beyond the primary (index 0, which reuses the single Underlying
+  // asset(s) dialog's spot/volatility/dividendYield) come from the
+  // arbitrary-length assetSpots/assetVolatilities/assetDividendYields
+  // arrays -- rainbow and himalayan are no longer hardcoded to 2/3 assets.
+  function basketSpots(config) { return [config.spot, ...config.assetSpots]; }
+  function basketVolatilities(config) { return [config.volatility, ...config.assetVolatilities]; }
+  function basketDividendYields(config) { return [config.dividendYield, ...config.assetDividendYields]; }
+
   function bridgeSurvival(previous, current, barrier, direction, varianceDt) {
     if (direction === "up") {
       if (previous >= barrier || current >= barrier) return 0.0;
@@ -686,27 +694,26 @@
         compoundPayoff(underlyingCall, config.compoundStrike);
     }
     if (config.product === "rainbow") {
-      const normals = pathNormals(pathIndex, 2, source, rng, shifts);
-      const first = config.spot * Math.exp(
-        (config.rate - config.dividendYield - 0.5 * config.volatility ** 2) * config.maturity +
-        config.volatility * Math.sqrt(config.maturity) * normals[0],
-      );
-      const secondNormal = config.correlation * normals[0] +
-        Math.sqrt(Math.max(1.0 - config.correlation ** 2, 0.0)) * normals[1];
-      const second = config.spot2 * Math.exp(
-        (config.rate - config.dividendYield2 - 0.5 * config.volatility2 ** 2) * config.maturity +
-        config.volatility2 * Math.sqrt(config.maturity) * secondNormal,
-      );
+      const assets = config.assetCount;
+      const normals = pathNormals(pathIndex, assets, source, rng, shifts);
+      const correlated = equicorrelatedNormals(normals, config.correlation);
+      const spots = basketSpots(config).slice(0, assets);
+      const vols = basketVolatilities(config).slice(0, assets);
+      const dividends = basketDividendYields(config).slice(0, assets);
+      const terminals = spots.map((spot, index) => spot * Math.exp(
+        (config.rate - dividends[index] - 0.5 * vols[index] ** 2) * config.maturity +
+        vols[index] * Math.sqrt(config.maturity) * correlated[index],
+      ));
       return Math.exp(-config.rate * config.maturity) *
-        rainbowPayoff(first, second, config.strike, config.optionType, config.rainbowStyle);
+        rainbowPayoff(terminals, config.strike, config.optionType, config.rainbowStyle);
     }
     if (config.product === "himalayan") {
       const assets = config.assetCount;
       const observations = Math.min(config.observations, assets);
       const normals = pathNormals(pathIndex, assets * observations, source, rng, shifts);
-      const spots = [config.spot, config.spot2, config.spot3].slice(0, assets);
-      const vols = [config.volatility, config.volatility2, config.volatility3].slice(0, assets);
-      const dividends = [config.dividendYield, config.dividendYield2, config.dividendYield3].slice(0, assets);
+      const spots = basketSpots(config).slice(0, assets);
+      const vols = basketVolatilities(config).slice(0, assets);
+      const dividends = basketDividendYields(config).slice(0, assets);
       const active = new Set(Array.from({ length: assets }, (_, index) => index));
       const dt = config.maturity / observations;
       const selectedReturns = [];
@@ -803,7 +810,7 @@
     if (config.product === "bermudan") return bermudanLsm(config, source);
     let dimensions;
     if (["digital", "compound"].includes(config.product)) dimensions = 1;
-    else if (config.product === "rainbow") dimensions = 2;
+    else if (config.product === "rainbow") dimensions = config.assetCount;
     else if (config.product === "himalayan") dimensions = config.assetCount *
       Math.min(config.observations, config.assetCount);
     else dimensions = config.monitoringSteps;
@@ -1378,7 +1385,17 @@
       autocallBarrier: Number(input.autocallBarrier ?? 1.0),
       protectionBarrier: Number(input.protectionBarrier ?? 0.7),
       observations: Math.trunc(Number(input.observations ?? 3)),
-      assetCount: Math.trunc(Number(input.assetCount ?? 3)),
+      assetCount: Math.trunc(Number(input.assetCount ?? (input.product === "rainbow" ? 2 : 3))),
+      // Assets beyond the primary, for rainbow/himalayan -- arbitrary length,
+      // not capped at the old spot2/spot3-only 3-asset basket. Falls back to
+      // spot2/spot3 (as a 2-entry array) when the caller hasn't supplied the
+      // new arrays, so exotics.html's still-2/3-field basket UI keeps working.
+      assetSpots: Array.isArray(input.assetSpots)
+        ? input.assetSpots.map(Number) : [Number(input.spot2 ?? 100), Number(input.spot3 ?? 100)],
+      assetVolatilities: Array.isArray(input.assetVolatilities)
+        ? input.assetVolatilities.map(Number) : [Number(input.volatility2 ?? 0.25), Number(input.volatility3 ?? 0.3)],
+      assetDividendYields: Array.isArray(input.assetDividendYields)
+        ? input.assetDividendYields.map(Number) : [Number(input.dividendYield2 ?? 0.0), Number(input.dividendYield3 ?? 0.0)],
       returnStrike: Number(input.returnStrike ?? 0.0),
       ladderRungs: Array.isArray(input.ladderRungs)
         ? input.ladderRungs.map(Number)
@@ -1390,6 +1407,16 @@
       throw new Error("Spot, strike, maturity, and volatility must be positive.");
     }
     if (config.paths < 100 || config.paths > 500000) throw new Error("Paths must be between 100 and 500,000.");
+    if (config.product === "rainbow" || config.product === "himalayan") {
+      if (config.assetCount < 2 || config.assetCount > 20) {
+        throw new Error("Basket asset count must be between 2 and 20.");
+      }
+      if (config.assetSpots.length < config.assetCount - 1
+        || config.assetVolatilities.length < config.assetCount - 1
+        || config.assetDividendYields.length < config.assetCount - 1) {
+        throw new Error("Not enough basket asset entries were supplied for the selected asset count.");
+      }
+    }
     if (config.monitoringSteps < 1 || config.monitoringSteps > 16) {
       throw new Error("Monitoring steps must be between 1 and 16.");
     }

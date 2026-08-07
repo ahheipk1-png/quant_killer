@@ -80,8 +80,12 @@ def _weights(p, count):
     return [value / total for value in values]
 
 
-def _asset_count(p):
+def _asset_count(p, extra):
     product = int(p[0])
+    # rainbow/himalayan, when the caller supplies the arbitrary-length extra
+    # asset array (see _basket_arrays), are no longer capped at 3.
+    if extra is not None and product in (4, 6):
+        return max(2, int(extra[0]))
     if product == 4:
         return 2
     if product == 6:
@@ -89,6 +93,22 @@ def _asset_count(p):
     if int(p[55]) != 0:
         return max(1, min(int(p[56]), 3))
     return 1
+
+
+def _basket_arrays(p, extra, assets):
+    # extra layout: [assetCount, spot_2, vol_2, div_2, spot_3, vol_3, div_3, ...]
+    # -- asset 1 (index 0) always reuses the primary spot/volatility/dividend
+    # fields (p[2]/p[6]/p[5]), matching the JS reference engine's basketSpots.
+    if extra is not None and len(extra) >= 1 + 3 * (assets - 1):
+        initial = [p[2]]
+        base_vols = [p[6]]
+        dividends = [p[5]]
+        for index in range(assets - 1):
+            initial.append(extra[1 + 3 * index])
+            base_vols.append(extra[2 + 3 * index])
+            dividends.append(extra[3 + 3 * index])
+        return initial, base_vols, dividends
+    return [p[2], p[22], p[25]][:assets], [p[6], p[23], p[26]][:assets], [p[5], p[24], p[27]][:assets]
 
 
 def _term_vol(p, base_vol, time):
@@ -103,17 +123,28 @@ def _leverage(spot, initial, beta):
 
 
 def _correlate(values, correlation):
-    if len(values) == 1:
+    # General equicorrelated Cholesky (mirrors exotic-pricer.js's
+    # equicorrelatedNormals) -- for count<=3 this reproduces the previous
+    # hand-unrolled 1/2/3-asset formulas exactly, since both are the same
+    # Cholesky factorization of a constant off-diagonal correlation matrix.
+    count = len(values)
+    if count == 1:
         return values
-    result = [0.0] * len(values)
-    result[0] = values[0]
-    l22 = math.sqrt(max(1.0 - correlation * correlation, 0.0))
-    result[1] = correlation * values[0] + l22 * values[1]
-    if len(values) == 3:
-        l32 = correlation * (1.0 - correlation) / l22 if l22 > 1e-14 else 0.0
-        l33 = math.sqrt(max(1.0 - correlation * correlation - l32 * l32, 0.0))
-        result[2] = correlation * values[0] + l32 * values[1] + l33 * values[2]
-    return result
+    lower = [[0.0] * count for _ in range(count)]
+    for row in range(count):
+        for column in range(row + 1):
+            value = 1.0 if row == column else correlation
+            for offset in range(column):
+                value -= lower[row][offset] * lower[column][offset]
+            if row == column:
+                lower[row][column] = math.sqrt(max(value, 0.0))
+            else:
+                lower[row][column] = value / lower[column][column]
+    correlated = [0.0] * count
+    for row in range(count):
+        for column in range(row + 1):
+            correlated[row] += lower[row][column] * values[column]
+    return correlated
 
 
 def _effective_underlying(p, paths, initial):
@@ -142,11 +173,9 @@ def _effective_underlying(p, paths, initial):
     return result
 
 
-def _simulate_path(p, schedule, rng):
-    assets = _asset_count(p)
-    initial = [p[2], p[22], p[25]][:assets]
-    base_vols = [p[6], p[23], p[26]][:assets]
-    dividends = [p[5], p[24], p[27]][:assets]
+def _simulate_path(p, schedule, rng, extra):
+    assets = _asset_count(p, extra)
+    initial, base_vols, dividends = _basket_arrays(p, extra, assets)
     spots = initial[:]
     variances = [value * value for value in base_vols]
     paths = [[] for _ in range(assets)]
@@ -216,7 +245,7 @@ def _phoenix_pv(p, path, schedule, allow_autocall):
     return present + math.exp(-p[4] * p[13]) * redemption
 
 
-def _path_value(p, paths, underlying, log_returns, schedule):
+def _path_value(p, paths, underlying, log_returns, schedule, extra):
     product = int(p[0])
     terminal = underlying[-1]
     discount = math.exp(-p[4] * p[13])
@@ -232,8 +261,8 @@ def _path_value(p, paths, underlying, log_returns, schedule):
         active = hit if int(p[19]) else not hit
         return discount * vanilla_payoff(terminal, p[3], is_call) * (1.0 if active else 0.0)
     if product == 4:
-        second = paths[1][-1]
-        selected = max(terminal, second) if int(p[29]) else min(terminal, second)
+        terminals = [path[-1] for path in paths]
+        selected = max(terminals) if int(p[29]) else min(terminals)
         return discount * vanilla_payoff(selected, p[3], is_call)
     if product == 5:
         for index, value in enumerate(underlying):
@@ -248,9 +277,10 @@ def _path_value(p, paths, underlying, log_returns, schedule):
     if product == 17:
         return _phoenix_pv(p, underlying, schedule, False)
     if product == 6:
-        active = set(range(min(int(p[35]), len(paths))))
+        assets = len(paths)
+        active = set(range(assets))
         selected_returns = []
-        initial = [p[2], p[22], p[25]]
+        initial, _, _ = _basket_arrays(p, extra, assets)
         for step in range(len(schedule)):
             best_asset = -1
             best_return = -math.inf
@@ -332,7 +362,7 @@ def _solve_three_by_three(matrix, vector):
 
 
 def _bermudan_price(p, schedule, path_count, rng):
-    paths = [_simulate_path(p, schedule, rng)[1] for _ in range(path_count)]
+    paths = [_simulate_path(p, schedule, rng, None)[1] for _ in range(path_count)]
     last = len(schedule) - 1
     cashflow = [vanilla_payoff(path[last], p[3], int(p[14]) == 1) for path in paths]
     exercise_time = [schedule[last]] * path_count
@@ -366,8 +396,9 @@ def _bermudan_price(p, schedule, path_count, rng):
             for index in range(path_count)]
 
 
-def price_advanced(parameters, paths, seed):
+def price_advanced(parameters, paths, seed, extra_assets=None):
     p = [float(value) for value in parameters]
+    extra = list(extra_assets) if extra_assets is not None else None
     path_count = max(100, int(paths))
     count = max(1, min(int(p[15]), 260))
     schedule = [p[HEADER_SIZE + index] for index in range(count)]
@@ -377,8 +408,8 @@ def price_advanced(parameters, paths, seed):
     else:
         samples = []
         for _ in range(path_count):
-            raw_paths, underlying, log_returns = _simulate_path(p, schedule, rng)
-            samples.append(_path_value(p, raw_paths, underlying, log_returns, schedule))
+            raw_paths, underlying, log_returns = _simulate_path(p, schedule, rng, extra)
+            samples.append(_path_value(p, raw_paths, underlying, log_returns, schedule, extra))
     mean = sum(samples) / path_count
     variance = sum((value - mean) ** 2 for value in samples) / max(path_count - 1, 1)
     standard_deviation = math.sqrt(max(variance, 0.0))

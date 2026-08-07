@@ -224,8 +224,7 @@
   }
 
   function assetCountFor(config) {
-    if (config.product === "rainbow") return 2;
-    if (config.product === "himalayan") return config.assetCount;
+    if (config.product === "rainbow" || config.product === "himalayan") return config.assetCount;
     if (config.underlyingMode !== "single") return config.basketAssetCount;
     return 1;
   }
@@ -280,25 +279,37 @@
     return values;
   }
 
+  // General equicorrelated Cholesky (arbitrary asset count) -- for count<=3
+  // this reproduces the previous hand-unrolled 1/2/3-asset formulas exactly,
+  // since both factorize the same constant off-diagonal correlation matrix.
   function correlateAssets(independent, correlation) {
-    if (independent.length === 1) return independent;
-    const result = new Float64Array(independent.length);
-    result[0] = independent[0];
-    const l22 = Math.sqrt(Math.max(1.0 - correlation * correlation, 0.0));
-    result[1] = correlation * independent[0] + l22 * independent[1];
-    if (independent.length === 3) {
-      const l32 = l22 > 1e-14 ? correlation * (1.0 - correlation) / l22 : 0.0;
-      const l33 = Math.sqrt(Math.max(1.0 - correlation * correlation - l32 * l32, 0.0));
-      result[2] = correlation * independent[0] + l32 * independent[1] + l33 * independent[2];
+    const count = independent.length;
+    if (count === 1) return independent;
+    const lower = Array.from({ length: count }, () => new Float64Array(count));
+    for (let row = 0; row < count; row += 1) {
+      for (let column = 0; column <= row; column += 1) {
+        let value = row === column ? 1.0 : correlation;
+        for (let offset = 0; offset < column; offset += 1) value -= lower[row][offset] * lower[column][offset];
+        lower[row][column] = row === column
+          ? Math.sqrt(Math.max(value, 0.0))
+          : value / lower[column][column];
+      }
     }
-    return result;
+    const correlated = new Float64Array(count);
+    for (let row = 0; row < count; row += 1) {
+      for (let column = 0; column <= row; column += 1) correlated[row] += lower[row][column] * independent[column];
+    }
+    return correlated;
   }
 
   function simulatePath(config, schedule, source, pathIndex, rng, shifts) {
     const assets = assetCountFor(config);
-    const initialSpots = [config.spot, config.spot2, config.spot3].slice(0, assets);
-    const baseVols = [config.volatility, config.volatility2, config.volatility3].slice(0, assets);
-    const dividends = [config.dividendYield, config.dividendYield2, config.dividendYield3].slice(0, assets);
+    // Rainbow/himalayan (arbitrary N) read the assetSpots/Volatilities/
+    // DividendYields arrays; other basket products stay on the fixed
+    // spot2/spot3 fallback Base.normalizeConfig fills those arrays with.
+    const initialSpots = [config.spot, ...config.assetSpots].slice(0, assets);
+    const baseVols = [config.volatility, ...config.assetVolatilities].slice(0, assets);
+    const dividends = [config.dividendYield, ...config.assetDividendYields].slice(0, assets);
     const spots = initialSpots.slice();
     const variances = baseVols.map((value) => value * value);
     const paths = Array.from({ length: assets }, () => new Float64Array(schedule.length));
@@ -434,10 +445,8 @@
       );
     }
     if (config.product === "rainbow") {
-      const second = simulation.paths[1][schedule.length - 1];
-      return discount * Base.rainbowPayoff(
-        terminal, second, config.strike, config.optionType, config.rainbowStyle,
-      );
+      const terminals = simulation.paths.map((path) => path[schedule.length - 1]);
+      return discount * Base.rainbowPayoff(terminals, config.strike, config.optionType, config.rainbowStyle);
     }
     if (config.product === "autocallable") {
       const redemption = Base.autocallablePayoff(primary, {
@@ -450,13 +459,14 @@
     if (config.product === "phoenix-autocall") return phoenixPresentValue(config, primary, schedule, true);
     if (config.product === "yield-seeker") return phoenixPresentValue(config, primary, schedule, false);
     if (config.product === "himalayan") {
+      const initialSpots = [config.spot, ...config.assetSpots].slice(0, config.assetCount);
       const active = new Set(Array.from({ length: config.assetCount }, (_, index) => index));
       const selected = [];
       for (let step = 0; step < schedule.length; step += 1) {
         let bestAsset = -1;
         let bestReturn = -Infinity;
         for (const asset of active) {
-          const previous = step === 0 ? [config.spot, config.spot2, config.spot3][asset]
+          const previous = step === 0 ? initialSpots[asset]
             : simulation.paths[asset][step - 1];
           const intervalReturn = simulation.paths[asset][step] / previous - 1.0;
           if (intervalReturn > bestReturn) {

@@ -5,7 +5,7 @@
   const LANGUAGES = [
     { id: "cpp", label: "C++", workerUrl: "advanced-cpp-worker.js?v=3", type: "classic", loadTimeout: 30000 },
     { id: "rust", label: "Rust", workerUrl: "advanced-rust-worker.js?v=3", type: "classic", loadTimeout: 30000 },
-    { id: "python", label: "Python", workerUrl: "advanced-python-worker.mjs?v=3", type: "module", loadTimeout: 120000 },
+    { id: "python", label: "Python", workerUrl: "advanced-python-worker.mjs?v=4", type: "module", loadTimeout: 120000 },
     { id: "csharp", label: "C#", workerUrl: "advanced-csharp-worker.mjs?v=3", type: "module", loadTimeout: 120000 },
   ];
 
