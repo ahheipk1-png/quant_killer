@@ -9,10 +9,10 @@
   gap: 32px;
   margin-top: 28px;
   padding: 28px;
-  border-color: rgba(94, 225, 194, 0.45);
+  border-color: rgba(15, 157, 132, 0.45);
   background:
-    radial-gradient(circle at 92% 20%, rgba(94, 225, 194, 0.13), transparent 34%),
-    var(--panel);
+    radial-gradient(circle at 92% 20%, rgba(15, 157, 132, 0.13), transparent 34%),
+    var(--surface);
 }
 
 .test-summary h2 {
@@ -41,7 +41,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px 16px;
-  background: rgba(4, 16, 29, 0.45);
+  background: var(--surface-raised);
 }
 
 .summary-metrics dt {
@@ -61,7 +61,7 @@
 }
 
 html[data-test-state="failed"] .test-summary {
-  border-color: rgba(255, 139, 139, 0.6);
+  border-color: rgba(200, 54, 47, 0.6);
 }
 
 html[data-test-state="failed"] .summary-metrics dd {
@@ -138,7 +138,7 @@ html[data-test-state="failed"] .summary-metrics dd {
 .group-status {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: rgba(94, 225, 194, 0.12);
+  background: rgba(15, 157, 132, 0.12);
   color: var(--accent);
   padding: 7px 11px;
   font-size: 0.75rem;
@@ -146,7 +146,7 @@ html[data-test-state="failed"] .summary-metrics dd {
 }
 
 .group-status.fail {
-  background: rgba(255, 139, 139, 0.12);
+  background: rgba(200, 54, 47, 0.12);
   color: var(--danger);
 }
 
@@ -158,7 +158,7 @@ html[data-test-state="failed"] .summary-metrics dd {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 15px 17px;
-  background: rgba(4, 16, 29, 0.42);
+  background: var(--surface-raised);
 }
 
 .payoff-formula,
@@ -222,7 +222,7 @@ html[data-test-state="failed"] .summary-metrics dd {
 }
 
 .input-code {
-  color: #b8c9dc;
+  color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.74rem;
   line-height: 1.5;

@@ -68,7 +68,7 @@
 
 .secondary-button:hover:not(:disabled) {
   border-color: var(--accent);
-  background: rgba(94, 225, 194, 0.08);
+  background: rgba(15, 157, 132, 0.08);
 }
 
 .action-group {
@@ -147,14 +147,14 @@
 .pass-badge {
   display: inline-block;
   border-radius: 999px;
-  background: rgba(94, 225, 194, 0.12);
+  background: rgba(15, 157, 132, 0.12);
   color: var(--accent);
   padding: 4px 8px;
   font-weight: 800;
 }
 
 .pass-badge.fail {
-  background: rgba(255, 139, 139, 0.12);
+  background: rgba(200, 54, 47, 0.12);
   color: var(--danger);
 }
 

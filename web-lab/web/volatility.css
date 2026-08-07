@@ -46,7 +46,7 @@
 
 .secondary-button:hover:not(:disabled) {
   border-color: var(--accent);
-  background: rgba(94, 225, 194, 0.08);
+  background: rgba(15, 157, 132, 0.08);
   color: var(--accent);
 }
 
@@ -74,15 +74,15 @@ textarea {
 
 textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(94, 225, 194, 0.12);
+  box-shadow: 0 0 0 3px rgba(15, 157, 132, 0.12);
 }
 
 .surface-summary {
   position: sticky;
   top: 20px;
   background:
-    radial-gradient(circle at 90% 8%, rgba(94, 225, 194, 0.14), transparent 38%),
-    rgba(13, 26, 43, 0.94);
+    radial-gradient(circle at 90% 8%, rgba(15, 157, 132, 0.1), transparent 38%),
+    var(--surface);
 }
 
 .surface-summary > h2 {
@@ -164,7 +164,7 @@ textarea:focus {
   min-height: 300px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: rgba(4, 14, 26, 0.7);
+  background: var(--chart-surface);
 }
 
 .table-wrap {

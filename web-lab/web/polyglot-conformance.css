@@ -25,7 +25,7 @@
   height: 0.5rem;
   margin-right: 0.5rem;
   border-radius: 50%;
-  background: #f4c95d;
+  background: var(--working);
 }
 
 .engine-load-status li[data-state="ready"]::before {
@@ -33,7 +33,7 @@
 }
 
 .engine-load-status li[data-state="error"]::before {
-  background: #ff7b7b;
+  background: var(--danger);
 }
 
 .conformance-panel {

@@ -42,7 +42,7 @@
 
 .model-item[aria-current="true"] {
   border-color: var(--accent);
-  background: rgba(94, 225, 194, 0.1);
+  background: rgba(15, 157, 132, 0.1);
   color: var(--text);
 }
 
@@ -94,7 +94,7 @@
 
 .lang-tab[aria-selected="true"] {
   border-color: var(--accent);
-  background: rgba(94, 225, 194, 0.14);
+  background: rgba(15, 157, 132, 0.14);
   color: var(--text);
 }
 
@@ -153,7 +153,7 @@
 .tok-kw { color: var(--accent); font-weight: 650; }
 .tok-str { color: var(--working); }
 .tok-com { color: var(--muted); font-style: italic; }
-.tok-num { color: #9d8cff; }
+.tok-num { color: #6d4fd1; }
 .tok-pre { color: var(--danger); }
 .tok-macro { color: var(--accent-strong); }
 

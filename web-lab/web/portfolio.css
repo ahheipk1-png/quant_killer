@@ -59,7 +59,7 @@
 
 .deal-editor textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(94, 225, 194, 0.12);
+  box-shadow: 0 0 0 3px rgba(15, 157, 132, 0.12);
 }
 
 .editor-actions,
@@ -83,7 +83,7 @@
 }
 
 .button-danger {
-  color: #ff9b9b;
+  color: var(--danger);
 }
 
 .row-button {
@@ -115,7 +115,7 @@
 }
 
 .portfolio-table .error-cell {
-  color: #ff9b9b;
+  color: var(--danger);
 }
 
 .portfolio-empty {
