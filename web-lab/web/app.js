@@ -668,6 +668,8 @@ function createInstrumentPanel(prefillEntry) {
     scheduleDialog.querySelector('[name="exerciseDates"]').closest(".field").hidden =
       product !== "bermudan" || mode !== "equal";
     scheduleDialog.querySelector('[name="valuationDate"]').closest(".field").hidden = mode === "equal";
+    scheduleDialog.querySelector('[name="endDate"]').closest(".field").hidden = mode === "equal";
+    scheduleDialog.querySelector('[name="holidayCalendar"]').closest(".field").hidden = mode !== "business-monthly";
     scheduleDialog.querySelector('[name="observationDates"]').closest(".field").hidden = mode !== "custom";
   }
 

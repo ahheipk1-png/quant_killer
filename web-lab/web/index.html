@@ -8,8 +8,9 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="exotics.css">
     <script src="polyglot-contract.js" defer></script>
-    <script src="exotic-fields.js?v=1" defer></script>
-    <script src="app.js?v=13" defer></script>
+    <script src="holiday-calendars.js?v=1" defer></script>
+    <script src="exotic-fields.js?v=2" defer></script>
+    <script src="app.js?v=14" defer></script>
   </head>
   <body>
     <main class="page-shell">
@@ -236,8 +237,23 @@
                 </select>
               </label>
               <label class="field" hidden>
-                Valuation date
+                Start date
                 <input name="valuationDate" type="date" value="2026-08-03">
+              </label>
+              <label class="field" hidden>
+                End date
+                <input name="endDate" type="date" value="2027-08-03">
+              </label>
+              <label class="field" hidden>
+                Holiday calendar
+                <select name="holidayCalendar">
+                  <option value="weekends">Weekends only (no market holidays)</option>
+                  <option value="us">United States — NYSE / ICE / CME / Fed</option>
+                  <option value="uk">United Kingdom — LSE</option>
+                  <option value="ca">Canada — TSX</option>
+                  <option value="jp">Japan — JPX</option>
+                  <option value="hk">Hong Kong — HKEX (fixed-date holidays only)</option>
+                </select>
               </label>
               <label class="field" hidden>
                 Custom dates · comma separated

@@ -119,7 +119,9 @@
   const scheduleFields = (count = 12, countLabel = "Equal observation dates") => [
     { name: "monitoringSteps", label: countLabel, value: count, min: 1, max: 260, step: 1 },
     select("scheduleMode", "Observation schedule", [["equal", "Equally spaced"], ["business-monthly", "Monthly business day"], ["custom", "Custom business dates"]], "equal"),
-    { name: "valuationDate", label: "Valuation date", type: "date", value: "2026-08-03" },
+    { name: "valuationDate", label: "Start date", type: "date", value: "2026-08-03" },
+    { name: "endDate", label: "End date", type: "date", value: "2027-08-03" },
+    select("holidayCalendar", "Holiday calendar", HolidayCalendars.MARKETS, "weekends"),
     { name: "observationDates", label: "Custom dates · comma separated", type: "text", value: "2026-09-01, 2026-10-15, 2027-01-04, 2027-08-02" },
   ];
 
@@ -140,7 +142,9 @@
       { name: "exerciseDates", label: "Equal exercise dates", value: 4, min: 1, max: 260, step: 1 },
       { name: "treeSteps", label: "Tree steps", value: 600, min: 50, max: 2000, step: 1 },
       select("scheduleMode", "Exercise schedule", [["equal", "Equally spaced"], ["business-monthly", "Monthly business day"], ["custom", "Custom business dates"]], "equal"),
-      { name: "valuationDate", label: "Valuation date", type: "date", value: "2026-08-03" },
+      { name: "valuationDate", label: "Start date", type: "date", value: "2026-08-03" },
+      { name: "endDate", label: "End date", type: "date", value: "2027-08-03" },
+      select("holidayCalendar", "Holiday calendar", HolidayCalendars.MARKETS, "weekends"),
       { name: "observationDates", label: "Custom dates · comma separated", type: "text", value: "2026-11-02, 2027-02-03, 2027-05-03, 2027-08-02" },
     ],
     rainbow: [
@@ -286,9 +290,7 @@
   }
 
   function followingWeekday(date) {
-    const result = new Date(date.getTime());
-    while (result.getUTCDay() === 0 || result.getUTCDay() === 6) result.setUTCDate(result.getUTCDate() + 1);
-    return result;
+    return HolidayCalendars.followingBusinessDay(date, "weekends");
   }
 
   function buildObservationTimes(data) {
@@ -296,11 +298,18 @@
     if (mode === "equal") return [];
     const start = utcDate(data.valuationDate);
     const maturity = Number(data.maturity);
-    const end = new Date(start.getTime() + Math.round(365 * maturity) * 86400000);
+    // End date only bounds the generated schedule window -- maturity is
+    // still the authoritative pricing input (see the time-filter below),
+    // so a mismatched end date can only drop dates early, never add ones
+    // past maturity.
+    const end = data.endDate ? utcDate(data.endDate) : new Date(start.getTime() + Math.round(365 * maturity) * 86400000);
     let dates = [];
     if (mode === "business-monthly") {
+      const calendar = data.holidayCalendar || "weekends";
       for (let month = 1; month <= Math.ceil(maturity * 12); month += 1) {
-        const date = followingWeekday(new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + month, start.getUTCDate())));
+        const date = HolidayCalendars.followingBusinessDay(
+          new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + month, start.getUTCDate())), calendar,
+        );
         if (date < end) dates.push(date);
       }
     } else {

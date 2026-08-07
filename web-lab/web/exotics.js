@@ -71,7 +71,8 @@ function updateScheduleFields() {
   for (const element of productFields.querySelectorAll("[data-field-name]")) {
     const name = element.dataset.fieldName;
     if (name === "monitoringSteps" || name === "exerciseDates") element.hidden = mode !== "equal";
-    if (name === "valuationDate") element.hidden = mode === "equal";
+    if (name === "valuationDate" || name === "endDate") element.hidden = mode === "equal";
+    if (name === "holidayCalendar") element.hidden = mode !== "business-monthly";
     if (name === "observationDates") element.hidden = mode !== "custom";
   }
 }
