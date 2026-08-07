@@ -1004,6 +1004,7 @@ button:disabled {
 /* ===================== Instrument panels (index.html) ===================== */
 
 .instruments {
+  max-width: 720px;
   margin-top: 46px;
 }
 
