@@ -42,7 +42,7 @@
 
 .model-item[aria-current="true"] {
   border-color: var(--accent);
-  background: rgba(15, 157, 132, 0.1);
+  background: rgba(15, 159, 143, 0.1);
   color: var(--text);
 }
 
@@ -94,7 +94,7 @@
 
 .lang-tab[aria-selected="true"] {
   border-color: var(--accent);
-  background: rgba(15, 157, 132, 0.14);
+  background: rgba(15, 159, 143, 0.14);
   color: var(--text);
 }
 

@@ -9,9 +9,9 @@
   gap: 32px;
   margin-top: 28px;
   padding: 28px;
-  border-color: rgba(15, 157, 132, 0.45);
+  border-color: rgba(15, 159, 143, 0.45);
   background:
-    radial-gradient(circle at 92% 20%, rgba(15, 157, 132, 0.13), transparent 34%),
+    radial-gradient(circle at 92% 20%, rgba(15, 159, 143, 0.13), transparent 34%),
     var(--surface);
 }
 
@@ -61,7 +61,7 @@
 }
 
 html[data-test-state="failed"] .test-summary {
-  border-color: rgba(200, 54, 47, 0.6);
+  border-color: rgba(220, 38, 38, 0.6);
 }
 
 html[data-test-state="failed"] .summary-metrics dd {
@@ -138,7 +138,7 @@ html[data-test-state="failed"] .summary-metrics dd {
 .group-status {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: rgba(15, 157, 132, 0.12);
+  background: rgba(15, 159, 143, 0.12);
   color: var(--accent);
   padding: 7px 11px;
   font-size: 0.75rem;
@@ -146,7 +146,7 @@ html[data-test-state="failed"] .summary-metrics dd {
 }
 
 .group-status.fail {
-  background: rgba(200, 54, 47, 0.12);
+  background: rgba(220, 38, 38, 0.12);
   color: var(--danger);
 }
 

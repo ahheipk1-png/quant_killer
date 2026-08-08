@@ -1,15 +1,17 @@
 :root {
+  /* "QuantKiller / Institutional" palette: navy text, teal accent, amber
+     for status/highlight, cards a shade brighter than the page itself. */
   color-scheme: light;
-  --background: #ffffff;
-  --surface: #f7f9fc;
-  --surface-raised: #eef2f7;
-  --border: #d7dfea;
-  --text: #101826;
-  --muted: #5b6b80;
-  --accent: #0f9d84;
-  --accent-strong: #0b7d69;
-  --danger: #c8362f;
-  --working: #a56a0a;
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-raised: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #0f9f8f;
+  --accent-strong: #0b7a6e;
+  --danger: #dc2626;
+  --working: #f59e0b;
   /* Canvas-drawn charts (app.js/path-lab.js/volatility-lab.js) still use
      hardcoded stroke/fill colors tuned for a dark backdrop -- rather than
      rewrite chart-drawing JS across three files, chart panels stay a dark
@@ -28,7 +30,7 @@ body {
   min-width: 320px;
   margin: 0;
   background:
-    radial-gradient(circle at 80% 10%, rgba(15, 157, 132, 0.08), transparent 30rem),
+    radial-gradient(circle at 80% 10%, rgba(15, 159, 143, 0.08), transparent 30rem),
     var(--background);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -157,12 +159,12 @@ h1 {
   height: 9px;
   border-radius: 50%;
   background: var(--working);
-  box-shadow: 0 0 0 4px rgba(165, 106, 10, 0.12);
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.12);
 }
 
 .engine-line:has([data-state="ready"]) .engine-dot {
   background: var(--accent);
-  box-shadow: 0 0 0 4px rgba(15, 157, 132, 0.12);
+  box-shadow: 0 0 0 4px rgba(15, 159, 143, 0.12);
 }
 
 .engine-line:has([data-state="error"]) .engine-dot {
@@ -189,8 +191,8 @@ h1 {
 .panel {
   border: 1px solid var(--border);
   border-radius: 20px;
-  background: #e3e9f0;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.12);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 20px 40px rgba(15, 23, 42, 0.08);
 }
 
 .form-panel {
@@ -211,7 +213,7 @@ h1 {
   gap: 6px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--background);
+  background: var(--surface-raised);
   color: var(--text);
   padding: 14px 16px;
   text-align: left;
@@ -222,7 +224,7 @@ h1 {
 
 .module-trigger:hover:not(:disabled) {
   border-color: var(--muted);
-  background: rgba(91, 107, 128, 0.06);
+  background: rgba(100, 116, 139, 0.06);
 }
 
 .module-trigger:active {
@@ -230,7 +232,7 @@ h1 {
 }
 
 .module-trigger.drag-target {
-  background: rgba(15, 157, 132, 0.08);
+  background: rgba(15, 159, 143, 0.08);
   box-shadow: 0 0 0 1.5px var(--accent) inset;
 }
 
@@ -283,7 +285,7 @@ h1 {
 }
 
 .module-dialog::backdrop {
-  background: rgba(16, 24, 38, 0.72);
+  background: rgba(15, 23, 42, 0.72);
   backdrop-filter: blur(2px);
 }
 
@@ -349,7 +351,7 @@ h1 {
 
 .option-toggle-choice:has(input:checked) {
   border-color: var(--accent);
-  background: rgba(15, 157, 132, 0.1);
+  background: rgba(15, 159, 143, 0.1);
   color: var(--accent);
 }
 
@@ -417,7 +419,7 @@ h1 {
 }
 
 .dynamic-list-remove:hover {
-  background: rgba(200, 54, 47, 0.18);
+  background: rgba(220, 38, 38, 0.18);
   color: var(--danger);
 }
 
@@ -494,7 +496,7 @@ h1 {
 }
 
 .basket-remove-asset:hover {
-  background: rgba(200, 54, 47, 0.18);
+  background: rgba(220, 38, 38, 0.18);
   color: var(--danger);
 }
 
@@ -572,7 +574,7 @@ select {
 input:focus,
 select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(15, 157, 132, 0.12);
+  box-shadow: 0 0 0 3px rgba(15, 159, 143, 0.12);
 }
 
 .form-footer {
@@ -830,12 +832,12 @@ button:disabled {
 }
 
 .chip-duplicate:hover {
-  background: rgba(15, 157, 132, 0.18);
+  background: rgba(15, 159, 143, 0.18);
   color: var(--accent);
 }
 
 .chip-close:hover {
-  background: rgba(200, 54, 47, 0.18);
+  background: rgba(220, 38, 38, 0.18);
   color: var(--danger);
 }
 
@@ -1013,8 +1015,8 @@ button:disabled {
   max-width: 720px;
   border: 1px solid var(--border);
   border-radius: 20px;
-  background: #e3e9f0;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.12);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 20px 40px rgba(15, 23, 42, 0.08);
   padding: 26px;
 }
 
@@ -1069,7 +1071,7 @@ button:disabled {
 }
 
 .instrument-remove:hover {
-  background: rgba(200, 54, 47, 0.18);
+  background: rgba(220, 38, 38, 0.18);
   color: var(--danger);
 }
 
@@ -1090,7 +1092,7 @@ button:disabled {
 .add-instrument-button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(15, 157, 132, 0.06);
+  background: rgba(15, 159, 143, 0.06);
 }
 
 .add-instrument-plus {

@@ -46,7 +46,7 @@
 
 .secondary-button:hover:not(:disabled) {
   border-color: var(--accent);
-  background: rgba(15, 157, 132, 0.08);
+  background: rgba(15, 159, 143, 0.08);
   color: var(--accent);
 }
 
@@ -74,14 +74,14 @@ textarea {
 
 textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(15, 157, 132, 0.12);
+  box-shadow: 0 0 0 3px rgba(15, 159, 143, 0.12);
 }
 
 .surface-summary {
   position: sticky;
   top: 20px;
   background:
-    radial-gradient(circle at 90% 8%, rgba(15, 157, 132, 0.1), transparent 38%),
+    radial-gradient(circle at 90% 8%, rgba(15, 159, 143, 0.1), transparent 38%),
     var(--surface);
 }
 
