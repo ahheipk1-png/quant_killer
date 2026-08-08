@@ -105,14 +105,9 @@ h1 {
   text-transform: uppercase;
 }
 
-/* On every page except index.html itself, "Pricing" doubles as the link
-   back to the instrument builder (`<a class="nav-group-label nav-group-
-   link">`). .lab-nav a's pill styling (border, radius, padding, font-size
-   -- higher specificity than .nav-group-label, since it's a tag+class
-   selector) applies on top, so it renders as a normal clickable nav pill;
-   text-transform/letter-spacing survive uncontested from .nav-group-label,
-   so it still reads uppercase like its plain-label sibling "Verify". No
-   extra rule needed for .nav-group-link itself. */
+/* "Pricing" is a normal nav pill on every page (selected via
+   aria-current on index.html itself); only "Verify" remains a plain
+   .nav-group-label, since it has no landing page of its own. */
 
 .lab-nav a {
   border: 1px solid #fde68a;
