@@ -115,12 +115,10 @@ h1 {
    extra rule needed for .nav-group-link itself. */
 
 .lab-nav a {
-  border: 1px solid var(--border);
+  border: 1px solid #fde68a;
   border-radius: 999px;
-  /* --surface (#f7f9fc) was only 8/255 off white -- indistinguishable in
-     practice. This needs to actually read as a filled pill. */
-  background: #e4ebf2;
-  color: var(--muted);
+  background: #fef3c7;
+  color: #92400e;
   text-decoration: none;
   padding: 7px 14px;
   font-size: 0.83rem;
@@ -129,15 +127,15 @@ h1 {
 }
 
 .lab-nav a:hover {
-  border-color: var(--muted);
-  background: #d4dfea;
-  color: var(--text);
+  border-color: #fbbf24;
+  background: #fde68a;
+  color: #78350f;
 }
 
 .lab-nav a[aria-current="page"] {
-  border-color: var(--accent);
-  background: rgba(15, 157, 132, 0.16);
-  color: var(--text);
+  border-color: #92400e;
+  background: #b45309;
+  color: #ffffff;
 }
 
 @media (max-width: 640px) {
