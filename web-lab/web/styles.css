@@ -12,6 +12,7 @@
   --accent-strong: #0b7a6e;
   --danger: #dc2626;
   --working: #f59e0b;
+  --working-rgb: 245, 158, 11;
   /* Canvas-drawn charts (app.js/path-lab.js/volatility-lab.js) still use
      hardcoded stroke/fill colors tuned for a dark backdrop -- rather than
      rewrite chart-drawing JS across three files, chart panels stay a dark
@@ -112,9 +113,9 @@ h1 {
    .nav-group-label, since it has no landing page of its own. */
 
 .lab-nav a {
-  border: 1px solid #fde68a;
+  border: 1px solid rgba(var(--working-rgb), 0.4);
   border-radius: 999px;
-  background: #fef3c7;
+  background: rgba(var(--working-rgb), 0.14);
   color: #92400e;
   text-decoration: none;
   padding: 7px 14px;
@@ -124,14 +125,14 @@ h1 {
 }
 
 .lab-nav a:hover {
-  border-color: #fbbf24;
-  background: #fde68a;
+  border-color: rgba(var(--working-rgb), 0.7);
+  background: rgba(var(--working-rgb), 0.24);
   color: #78350f;
 }
 
 .lab-nav a[aria-current="page"] {
-  border-color: #92400e;
-  background: #b45309;
+  border-color: var(--working);
+  background: var(--working);
   color: #ffffff;
 }
 
