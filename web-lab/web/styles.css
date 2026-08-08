@@ -117,6 +117,7 @@ h1 {
 .lab-nav a {
   border: 1px solid var(--border);
   border-radius: 999px;
+  background: var(--surface);
   color: var(--muted);
   text-decoration: none;
   padding: 7px 14px;
@@ -127,12 +128,13 @@ h1 {
 
 .lab-nav a:hover {
   border-color: var(--muted);
+  background: var(--surface-raised);
   color: var(--text);
 }
 
 .lab-nav a[aria-current="page"] {
   border-color: var(--accent);
-  background: rgba(15, 157, 132, 0.12);
+  background: rgba(15, 157, 132, 0.16);
   color: var(--text);
 }
 
@@ -1004,7 +1006,6 @@ button:disabled {
 /* ===================== Instrument panels (index.html) ===================== */
 
 .instruments {
-  max-width: 720px;
   margin-top: 46px;
 }
 
@@ -1015,6 +1016,7 @@ button:disabled {
 }
 
 .instrument-panel {
+  max-width: 720px;
   border: 1px solid var(--border);
   border-radius: 20px;
   background: rgba(247, 249, 252, 0.88);
