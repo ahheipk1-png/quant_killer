@@ -189,9 +189,8 @@ h1 {
 .panel {
   border: 1px solid var(--border);
   border-radius: 20px;
-  background: rgba(247, 249, 252, 0.88);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(14px);
+  background: #e3e9f0;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.12);
 }
 
 .form-panel {
@@ -1014,9 +1013,8 @@ button:disabled {
   max-width: 720px;
   border: 1px solid var(--border);
   border-radius: 20px;
-  background: rgba(247, 249, 252, 0.88);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(14px);
+  background: #e3e9f0;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.12);
   padding: 26px;
 }
 
