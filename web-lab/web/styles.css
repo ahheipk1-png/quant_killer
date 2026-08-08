@@ -1,26 +1,46 @@
 :root {
-  /* "QuantKiller / Institutional" palette: navy text, teal accent, amber
-     for status/highlight, cards a shade brighter than the page itself. */
+  /* "QuantKiller / Institutional" palette, navy-dominant: the page itself
+     is navy (#0f172a) with light text; cards are white and re-scope the
+     same variables to dark-on-light (see the card-scope block below), so
+     every component works unchanged in either context. Teal is the action
+     accent, amber the status/highlight color. */
+  color-scheme: dark;
+  --background: #0f172a;
+  --surface: #16233a;
+  --surface-raised: #1e2c44;
+  --border: #334155;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #0f9f8f;
+  --accent-strong: #0b7a6e;
+  --danger: #f87171;
+  --working: #f59e0b;
+  --working-rgb: 245, 158, 11;
+  /* Canvas-drawn charts (app.js/path-lab.js/volatility-lab.js) still use
+     hardcoded stroke/fill colors tuned for a dark backdrop -- they keep
+     their own dedicated dark panel colors so they render identically
+     whether the panel sits on the navy page or inside a white card. */
+  --chart-surface: #0f1928;
+  --chart-text: #e7edf5;
+  --chart-muted: #93a7bd;
+}
+
+/* Cards float white on the navy page. Re-scoping the custom properties
+   here (rather than restyling every descendant rule) flips everything
+   inside a card -- inputs, labels, tables, dialogs, tooltips -- to
+   dark-on-white automatically, since they all read these variables. */
+.panel,
+.instrument-panel,
+.module-dialog {
   color-scheme: light;
-  --background: #f8fafc;
+  --background: #ffffff;
   --surface: #ffffff;
   --surface-raised: #f1f5f9;
   --border: #e2e8f0;
   --text: #0f172a;
   --muted: #64748b;
-  --accent: #0f9f8f;
-  --accent-strong: #0b7a6e;
   --danger: #dc2626;
-  --working: #f59e0b;
-  --working-rgb: 245, 158, 11;
-  /* Canvas-drawn charts (app.js/path-lab.js/volatility-lab.js) still use
-     hardcoded stroke/fill colors tuned for a dark backdrop -- rather than
-     rewrite chart-drawing JS across three files, chart panels stay a dark
-     "scope" island on the light page (a common pattern for data-dense
-     panels) and use these instead of --surface/--text/--muted. */
-  --chart-surface: #0f1928;
-  --chart-text: #e7edf5;
-  --chart-muted: #93a7bd;
+  color: var(--text);
 }
 
 * {
@@ -31,7 +51,7 @@ body {
   min-width: 320px;
   margin: 0;
   background:
-    radial-gradient(circle at 80% 10%, rgba(15, 159, 143, 0.08), transparent 30rem),
+    radial-gradient(circle at 80% 10%, rgba(15, 159, 143, 0.16), transparent 30rem),
     var(--background);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -113,10 +133,10 @@ h1 {
    .nav-group-label, since it has no landing page of its own. */
 
 .lab-nav a {
-  border: 1px solid rgba(var(--working-rgb), 0.4);
+  border: 1px solid rgba(var(--working-rgb), 0.45);
   border-radius: 999px;
-  background: rgba(var(--working-rgb), 0.14);
-  color: #92400e;
+  background: rgba(var(--working-rgb), 0.12);
+  color: #fcd34d;
   text-decoration: none;
   padding: 7px 14px;
   font-size: 0.83rem;
@@ -125,15 +145,15 @@ h1 {
 }
 
 .lab-nav a:hover {
-  border-color: rgba(var(--working-rgb), 0.7);
-  background: rgba(var(--working-rgb), 0.24);
-  color: #78350f;
+  border-color: rgba(var(--working-rgb), 0.75);
+  background: rgba(var(--working-rgb), 0.22);
+  color: #fde68a;
 }
 
 .lab-nav a[aria-current="page"] {
   border-color: var(--working);
   background: var(--working);
-  color: #ffffff;
+  color: #0f172a;
 }
 
 @media (max-width: 640px) {
@@ -193,7 +213,7 @@ h1 {
   border: 1px solid var(--border);
   border-radius: 20px;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 20px 40px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 6px rgba(2, 6, 17, 0.3), 0 24px 60px rgba(2, 6, 17, 0.45);
 }
 
 .form-panel {
@@ -1017,7 +1037,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 20px;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 20px 40px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 2px 6px rgba(2, 6, 17, 0.3), 0 24px 60px rgba(2, 6, 17, 0.45);
   padding: 26px;
 }
 
