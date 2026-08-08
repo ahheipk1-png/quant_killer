@@ -117,7 +117,9 @@ h1 {
 .lab-nav a {
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--surface);
+  /* --surface (#f7f9fc) was only 8/255 off white -- indistinguishable in
+     practice. This needs to actually read as a filled pill. */
+  background: #e4ebf2;
   color: var(--muted);
   text-decoration: none;
   padding: 7px 14px;
@@ -128,7 +130,7 @@ h1 {
 
 .lab-nav a:hover {
   border-color: var(--muted);
-  background: var(--surface-raised);
+  background: #d4dfea;
   color: var(--text);
 }
 
