@@ -303,12 +303,21 @@ form.addEventListener("submit", (event) => {
       return;
     }
     const config = readConfig();
+    // Borrow enters only through the carry (drift = r - q - b), so fold it
+    // into an effective dividend yield at the engine boundary. This page
+    // uses scalar borrow/borrow2/borrow3 fields (not an assetBorrows array).
+    const folded = {
+      ...config,
+      dividendYield: (Number(config.dividendYield) || 0) + (Number(config.borrow) || 0),
+      dividendYield2: (Number(config.dividendYield2) || 0) + (Number(config.borrow2) || 0),
+      dividendYield3: (Number(config.dividendYield3) || 0) + (Number(config.borrow3) || 0),
+    };
     requestId += 1;
     setBusy(true, `Pricing with ${languageDefinitions[language].label}…`);
-    if (language === "js") entry.worker.postMessage({ type: "price", requestId, method: methodSelect.value, config });
+    if (language === "js") entry.worker.postMessage({ type: "price", requestId, method: methodSelect.value, config: folded });
     else entry.worker.postMessage({
-      type: "price", requestId, method: "mc", config,
-      parameters: PolyglotContract.pack(config), paths: Math.trunc(Number(config.paths)), seed: Math.trunc(Number(config.seed)),
+      type: "price", requestId, method: "mc", config: folded,
+      parameters: PolyglotContract.pack(folded), paths: Math.trunc(Number(config.paths)), seed: Math.trunc(Number(config.seed)),
     });
   } catch (error) {
     formError.textContent = error.message || String(error);

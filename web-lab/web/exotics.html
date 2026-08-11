@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="A local polyglot browser lab for exotic and path-dependent pricing under constant, term, local, Heston, and stochastic-local volatility.">
     <title>QuantKiller · Exotic Option Lab</title>
-    <link rel="stylesheet" href="styles.css?v=9">
+    <link rel="stylesheet" href="styles.css?v=10">
     <link rel="stylesheet" href="exotics.css?v=3">
     <script src="polyglot-contract.js" defer></script>
     <script src="holiday-calendars.js?v=1" defer></script>
-    <script src="exotic-fields.js?v=6" defer></script>
-    <script src="exotics.js?v=8" defer></script>
+    <script src="exotic-fields.js?v=7" defer></script>
+    <script src="exotics.js?v=9" defer></script>
   </head>
   <body>
     <main class="page-shell">
@@ -140,6 +140,14 @@
               <label for="dividendYield">Asset 1 dividend yield</label>
               <div class="input-wrap">
                 <input id="dividendYield" name="dividendYield" type="number" value="0" step="any" required>
+                <span class="suffix">%</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="borrow">Asset 1 borrow cost</label>
+              <div class="input-wrap">
+                <input id="borrow" name="borrow" type="number" value="0" step="any" data-transform="percent" required>
                 <span class="suffix">%</span>
               </div>
             </div>

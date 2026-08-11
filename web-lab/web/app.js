@@ -51,6 +51,27 @@ function isExoticPayoff(payoffType) {
   return Boolean(payoffType) && !payoffType.startsWith("vanilla-");
 }
 
+// Stock borrow fee enters GBM pricing only through the carry
+// (drift = rate - dividend - borrow), so it folds into an effective
+// dividend yield at the engine boundary -- every engine stays entirely
+// borrow-unaware, which matters because the C++/Rust/C# wasm binaries and
+// the fixed PolyglotContract offsets can't be changed here. The raw config
+// keeps borrow separate so history round-trips it.
+function foldBorrow(config) {
+  const folded = {
+    ...config,
+    dividendYield: (Number(config.dividendYield) || 0) + (Number(config.borrow) || 0),
+  };
+  if (Array.isArray(config.assetDividendYields)) {
+    const borrows = Array.isArray(config.assetBorrows) ? config.assetBorrows : [];
+    folded.assetDividendYields = config.assetDividendYields
+      .map((q, index) => q + (Number(borrows[index]) || 0));
+    folded.dividendYield2 = folded.assetDividendYields[0] ?? config.dividendYield2;
+    folded.dividendYield3 = folded.assetDividendYields[1] ?? config.dividendYield3;
+  }
+  return folded;
+}
+
 const methods = {
   "closed-form": { label: "Black-Scholes closed form" },
   binomial: { label: "CRR binomial tree" },
@@ -286,6 +307,7 @@ function inputSummaryRows(entry) {
     ["Maturity", `${formatNumber(inputs.maturity, 4)} yr`],
     ["Rate", `${formatNumber(inputs.rate * 100, 2)}%`],
     ["Dividend yield", `${formatNumber(inputs.dividendYield * 100, 2)}%`],
+    ["Borrow cost", `${formatNumber((inputs.borrow || 0) * 100, 2)}%`],
     ["Volatility", `${formatNumber(inputs.volatility * 100, 2)}%`],
   ];
   if (inputs.method === "monte-carlo") {
@@ -483,9 +505,11 @@ function summarizeModule(root, module) {
     return `${ExoticFields.productLabels[payoffType] || payoffType} · ${type} · ${strikeMaturity}`;
   }
   if (module === "asset") {
+    const borrowValue = Number(q("borrow").value);
     return `Spot ${formatNumber(Number(q("spot").value), 2)} · `
       + `Vol ${formatNumber(Number(q("volatility").value), 2)}% · `
       + `Div ${formatNumber(Number(q("dividendYield").value), 2)}% · `
+      + (borrowValue ? `Borrow ${formatNumber(borrowValue, 2)}% · ` : "")
       + `Rate ${formatNumber(Number(q("rate").value), 2)}%`;
   }
   if (module === "model") {
@@ -685,6 +709,12 @@ function createInstrumentPanel(prefillEntry) {
       <label class="field">Dividend yield
         <div class="input-wrap">
           <input name="assetDividendYield" type="number" step="any" value="0" data-transform="percent">
+          <span class="suffix">%</span>
+        </div>
+      </label>
+      <label class="field">Borrow cost
+        <div class="input-wrap">
+          <input name="assetBorrow" type="number" step="any" value="0" data-transform="percent">
           <span class="suffix">%</span>
         </div>
       </label>
@@ -912,6 +942,8 @@ function createInstrumentPanel(prefillEntry) {
       data.assetVolatilities = [...basketAssetsList.querySelectorAll('[name="assetVolatility"]')]
         .slice(0, extraCount).map((el) => Number(el.value) / 100);
       data.assetDividendYields = [...basketAssetsList.querySelectorAll('[name="assetDividendYield"]')]
+        .slice(0, extraCount).map((el) => Number(el.value) / 100);
+      data.assetBorrows = [...basketAssetsList.querySelectorAll('[name="assetBorrow"]')]
         .slice(0, extraCount).map((el) => Number(el.value) / 100);
       // Backward compat for the fixed 3-asset packed contract that
       // PolyglotContract.pack() sends to the C++/Rust/C# engines -- only
@@ -1201,12 +1233,18 @@ function createInstrumentPanel(prefillEntry) {
         `${engineTable()[engineSelect.value].label} ${ExoticFields.methodLabels[method] || method} running`,
         "working",
       );
+      // Fold borrow into effective dividend at the engine boundary; the raw
+      // config (pendingConfig, for history) keeps borrow separate. The
+      // folded copy feeds both the js config and the packed native contract,
+      // and its assetDividendYields carry through to the Python worker's
+      // extraAssetsFor().
+      const folded = foldBorrow(config);
       if (engineSelect.value === "js") {
-        worker.postMessage({ type: "price", requestId, method, config });
+        worker.postMessage({ type: "price", requestId, method, config: folded });
       } else {
         worker.postMessage({
-          type: "price", requestId, method: "mc", config,
-          parameters: PolyglotContract.pack(config),
+          type: "price", requestId, method: "mc", config: folded,
+          parameters: PolyglotContract.pack(folded),
           paths: Math.trunc(Number(config.paths)), seed: Math.trunc(Number(config.seed)),
         });
       }
@@ -1220,6 +1258,7 @@ function createInstrumentPanel(prefillEntry) {
       strike: readNumber(form, "strike"),
       rate: readNumber(form, "rate") / 100,
       dividendYield: readNumber(form, "dividendYield") / 100,
+      borrow: readNumber(form, "borrow") / 100,
       volatility: readNumber(form, "volatility") / 100,
       maturity: readNumber(form, "maturity"),
       method,
@@ -1256,9 +1295,9 @@ function createInstrumentPanel(prefillEntry) {
     if (
       inputs.exerciseStyle === "american"
       && method !== "binomial"
-      && (inputs.rate < 0 || inputs.dividendYield < 0)
+      && (inputs.rate < 0 || inputs.dividendYield + inputs.borrow < 0)
     ) {
-      errorElement.textContent = "The American approximations require non-negative rates and dividend yield.";
+      errorElement.textContent = "The American approximations require a non-negative rate and non-negative effective carry (dividend yield plus borrow cost).";
       return;
     }
 
@@ -1271,7 +1310,13 @@ function createInstrumentPanel(prefillEntry) {
       `${engines[engineSelect.value].label} ${methods[method].label} running`,
       "working",
     );
-    worker.postMessage({ type: "price", requestId, inputs });
+    // Borrow enters GBM pricing only through the carry (drift = r - q - b),
+    // so it folds into an effective dividend yield at the worker boundary.
+    // inputs keeps borrow raw so history round-trips it separately.
+    worker.postMessage({
+      type: "price", requestId,
+      inputs: { ...inputs, dividendYield: inputs.dividendYield + inputs.borrow },
+    });
   });
 
   window.addEventListener("resize", () => {
@@ -1451,7 +1496,8 @@ function createInstrumentPanel(prefillEntry) {
     // display percent -- re-multiply on the way back in, or duplicating an
     // entry silently re-divides by 100 on the next submit.
     const percentFields = new Set([
-      "rate", "dividendYield", "volatility", "volatility2", "dividendYield2", "volatility3", "dividendYield3",
+      "rate", "dividendYield", "borrow", "volatility",
+      "volatility2", "dividendYield2", "volatility3", "dividendYield3",
     ]);
     Object.entries(prefillEntry.inputs).forEach(([name, value]) => {
       const element = form.elements[name];
@@ -1469,6 +1515,7 @@ function createInstrumentPanel(prefillEntry) {
       const spotInputs = [...basketAssetsList.querySelectorAll('[name="assetSpot"]')];
       const volInputs = [...basketAssetsList.querySelectorAll('[name="assetVolatility"]')];
       const divInputs = [...basketAssetsList.querySelectorAll('[name="assetDividendYield"]')];
+      const borrowInputs = [...basketAssetsList.querySelectorAll('[name="assetBorrow"]')];
       (prefillEntry.inputs.assetSpots || []).forEach((value, index) => {
         if (spotInputs[index]) spotInputs[index].value = value;
       });
@@ -1477,6 +1524,9 @@ function createInstrumentPanel(prefillEntry) {
       });
       (prefillEntry.inputs.assetDividendYields || []).forEach((value, index) => {
         if (divInputs[index]) divInputs[index].value = Number(value) * 100;
+      });
+      (prefillEntry.inputs.assetBorrows || []).forEach((value, index) => {
+        if (borrowInputs[index]) borrowInputs[index].value = Number(value) * 100;
       });
     }
     // observationDates/ladderRungs have the same "array, no single matching
@@ -1510,6 +1560,7 @@ function createInstrumentPanel(prefillEntry) {
     form.elements.spot.value = inputs.spot;
     form.elements.volatility.value = inputs.volatility * 100;
     form.elements.dividendYield.value = inputs.dividendYield * 100;
+    form.elements.borrow.value = (inputs.borrow || 0) * 100;
     form.elements.rate.value = inputs.rate * 100;
     exerciseSelect.value = inputs.exerciseStyle;
     form.elements.strike.value = inputs.strike;
@@ -1602,7 +1653,7 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
     if (sourceProduct === "rainbow" || sourceProduct === "himalayan") {
       const sourceAssetCount = sourceDialog.querySelector('[name="assetCount"]').value;
       targetControl.renderBasketAssetRows(sourceAssetCount);
-      ["assetSpot", "assetVolatility", "assetDividendYield"].forEach((name) => {
+      ["assetSpot", "assetVolatility", "assetDividendYield", "assetBorrow"].forEach((name) => {
         const sourceInputs = [...sourceDialog.querySelectorAll(`[data-basket-assets] [name="${name}"]`)];
         const targetInputs = [...targetControl.basketAssetsList.querySelectorAll(`[name="${name}"]`)];
         sourceInputs.forEach((sourceInput, index) => {

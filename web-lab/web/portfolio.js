@@ -267,6 +267,7 @@
       maturity,
       rate: Number(data.get("rate")) / 100,
       dividendYield: Number(data.get("dividendYield")) / 100,
+      borrow: Number(data.get("borrow")) / 100,
       volatility: Number(data.get("volatility")) / 100,
       paths: Math.trunc(Number(data.get("paths"))),
       seed: Math.trunc(Number(data.get("seed"))),
@@ -306,6 +307,7 @@
     form.elements.volatility.value = "20";
     form.elements.rate.value = "5";
     form.elements.dividendYield.value = "0";
+    form.elements.borrow.value = "0";
     form.elements.paths.value = "32768";
     form.elements.seed.value = "42";
     overridesInput.value = "";
@@ -329,6 +331,7 @@
     form.elements.volatility.value = String(deal.config.volatility * 100);
     form.elements.rate.value = String(deal.config.rate * 100);
     form.elements.dividendYield.value = String(deal.config.dividendYield * 100);
+    form.elements.borrow.value = String((deal.config.borrow || 0) * 100);
     form.elements.paths.value = String(deal.config.paths);
     form.elements.seed.value = String(deal.config.seed);
     overridesInput.value = Object.keys(deal.overrides || {}).length
@@ -429,7 +432,17 @@
     document.querySelector("#portfolio-runtime").textContent = "—";
     batchStatus.textContent = `Pricing 0 of ${deals.length} deals...`;
     render();
-    worker.postMessage({ type: "price-portfolio", requestId, deals });
+    // Borrow folds into effective dividend at the carry, so the worker (and
+    // the wasm engines behind it) stay borrow-unaware. The stored deals keep
+    // borrow raw for the editor round-trip.
+    const dealsForWorker = deals.map((deal) => ({
+      ...deal,
+      config: {
+        ...deal.config,
+        dividendYield: (Number(deal.config.dividendYield) || 0) + (Number(deal.config.borrow) || 0),
+      },
+    }));
+    worker.postMessage({ type: "price-portfolio", requestId, deals: dealsForWorker });
   }
 
   form.addEventListener("submit", (event) => {

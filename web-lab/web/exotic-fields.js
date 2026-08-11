@@ -237,8 +237,10 @@
     select("basketOrder", "Performance order statistic", [["1", "1 · best"], ["2", "2 · middle / worst of two"], ["3", "3 · worst of three"]], "1"),
     { name: "spot2", label: "Asset 2 spot", value: 100, min: 0.0001, step: "any" },
     percent("volatility2", "Asset 2 initial volatility", 25, { min: 0.01 }), percent("dividendYield2", "Asset 2 dividend yield", 0),
+    percent("borrow2", "Asset 2 borrow cost", 0),
     { name: "spot3", label: "Asset 3 spot", value: 100, min: 0.0001, step: "any" },
     percent("volatility3", "Asset 3 initial volatility", 30, { min: 0.01 }), percent("dividendYield3", "Asset 3 dividend yield", 0),
+    percent("borrow3", "Asset 3 borrow cost", 0),
     { name: "correlation", label: "Common asset correlation", value: 0.35, min: -0.49, max: 0.99, step: 0.01 },
   ];
 
