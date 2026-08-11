@@ -404,6 +404,141 @@
     return config.barrierStyle === "in" ? Math.max(vanilla - out, 0.0) : out;
   }
 
+  // ---- Discrete-monitoring and terminal barrier closed forms ------------
+  //
+  // Broadie-Glasserman-Kou continuity correction: a barrier monitored m
+  // times per year is priced by the continuous formula with the barrier
+  // shifted AWAY from spot by exp(beta * sigma * sqrt(1/m)), where
+  // beta = -zeta(1/2)/sqrt(2*pi). Discrete monitoring makes a knock-out
+  // less likely to trigger, which is exactly what the outward shift
+  // encodes; knock-in follows through the same in = vanilla - out parity
+  // used everywhere else in this file.
+  const BGK_BETA = 0.5825971579390107;
+
+  function bgkShiftedConfig(config, observationsPerYear) {
+    const factor = Math.exp(BGK_BETA * config.volatility * Math.sqrt(1.0 / observationsPerYear));
+    if (config.product === "double-barrier") {
+      return {
+        ...config,
+        upperBarrier: config.upperBarrier * factor,
+        lowerBarrier: config.lowerBarrier / factor,
+      };
+    }
+    return {
+      ...config,
+      barrier: config.barrierDirection === "down"
+        ? config.barrier / factor
+        : config.barrier * factor,
+    };
+  }
+
+  // PV of the vanilla payoff restricted to lowerBound < S_T < upperBound,
+  // from the two Black-Scholes building blocks
+  //   PV[S_T * 1{a<S_T<b}] = S e^{-qT} (N(d1(a)) - N(d1(b)))
+  //   PV[K   * 1{a<S_T<b}] = K e^{-rT} (N(d2(a)) - N(d2(b)))
+  // with d1/d2(x) = [ln(S/x) + (r - q +/- sigma^2/2) T] / (sigma sqrt(T)).
+  // Folding the strike into the truncation bounds (max for calls, min for
+  // puts) resolves every direction/type/strike-vs-barrier case at once.
+  function truncatedVanilla(config, lowerBound, upperBound) {
+    const { spot, strike, rate, dividendYield, volatility, maturity, optionType } = config;
+    const rootVariance = volatility * Math.sqrt(maturity);
+    const d2 = (x) => (Math.log(spot / x) +
+      (rate - dividendYield - 0.5 * volatility * volatility) * maturity) / rootVariance;
+    const cashMassAbove = (x) => (x <= 0.0 ? 1.0 : (Number.isFinite(x) ? normalCdf(d2(x)) : 0.0));
+    const stockMassAbove = (x) => (
+      x <= 0.0 ? 1.0 : (Number.isFinite(x) ? normalCdf(d2(x) + rootVariance) : 0.0));
+    const isCall = optionType === "call";
+    const lower = isCall ? Math.max(lowerBound, strike) : lowerBound;
+    const upper = isCall ? upperBound : Math.min(upperBound, strike);
+    if (upper <= lower) return 0.0;
+    const stockLeg = spot * Math.exp(-dividendYield * maturity) *
+      (stockMassAbove(lower) - stockMassAbove(upper));
+    const cashLeg = strike * Math.exp(-rate * maturity) *
+      (cashMassAbove(lower) - cashMassAbove(upper));
+    return Math.max(isCall ? stockLeg - cashLeg : cashLeg - stockLeg, 0.0);
+  }
+
+  // "European barrier": the barrier is tested only at expiry, so the
+  // knock-out is just the vanilla payoff truncated to the surviving
+  // terminal region. The current spot's position relative to the barrier
+  // is deliberately irrelevant here.
+  function barrierTerminalClosedForm(config) {
+    const out = config.barrierDirection === "down"
+      ? truncatedVanilla(config, config.barrier, Infinity)
+      : truncatedVanilla(config, 0.0, config.barrier);
+    return config.barrierStyle === "in"
+      ? Math.max(blackScholes(config) - out, 0.0)
+      : out;
+  }
+
+  function doubleBarrierTerminalClosedForm(config) {
+    const out = truncatedVanilla(config, config.lowerBarrier, config.upperBarrier);
+    return config.barrierStyle === "in"
+      ? Math.max(blackScholes(config) - out, 0.0)
+      : out;
+  }
+
+  // ---- Automatic Monte Carlo error benchmark for the closed forms -------
+  //
+  // Every barrier closed form ships with a Sobol QMC estimate of the SAME
+  // monitoring convention so the reported difference is the formula's
+  // error, not a monitoring mismatch:
+  //   continuous formulas  <-> bridge-corrected QMC (monteCarloPrice)
+  //   BGK daily/weekly     <-> plain 0/1 indicator on the matching grid,
+  //                            run on the ORIGINAL (unshifted) barriers
+  //   barrier-at-maturity  <-> single-step terminal indicator
+  // Fixed path count and no digital shift keep the benchmark reproducible
+  // without any seed plumbing.
+  const BENCHMARK_PATHS = 32768;
+
+  function discreteBarrierQmc(config, steps) {
+    const shifts = new Uint32Array(steps);
+    const samples = new Float64Array(BENCHMARK_PATHS);
+    const discount = Math.exp(-config.rate * config.maturity);
+    const isDouble = config.product === "double-barrier";
+    for (let pathIndex = 0; pathIndex < BENCHMARK_PATHS; pathIndex += 1) {
+      const normals = pathNormals(pathIndex, steps, "qmc", null, shifts);
+      const path = simulateGbmPath(config, normals);
+      let knocked = false;
+      for (const value of path) {
+        const hit = isDouble
+          ? (value <= config.lowerBarrier || value >= config.upperBarrier)
+          : (config.barrierDirection === "down"
+            ? value <= config.barrier : value >= config.barrier);
+        if (hit) {
+          knocked = true;
+          break;
+        }
+      }
+      const pays = config.barrierStyle === "in" ? knocked : !knocked;
+      samples[pathIndex] = pays
+        ? discount * vanillaPayoff(path[path.length - 1], config.strike, config.optionType)
+        : 0.0;
+    }
+    const summary = summarizeSamples(samples, "mc");
+    return {
+      price: summary.price,
+      standardError: summary.standardError,
+      samples: summary.samples,
+    };
+  }
+
+  function attachBarrierBenchmark(config, closedFormPrice, kind, steps) {
+    const mc = kind === "bridge-qmc"
+      ? monteCarloPrice(
+        { ...config, paths: BENCHMARK_PATHS, monitoringSteps: 24, randomizedQmc: false }, "qmc")
+      : discreteBarrierQmc(config, steps);
+    const standardError = mc.standardError ?? (
+      mc.standardDeviation != null ? mc.standardDeviation / Math.sqrt(BENCHMARK_PATHS) : null);
+    return {
+      price: mc.price,
+      standardError,
+      difference: closedFormPrice - mc.price,
+      kind,
+      samples: BENCHMARK_PATHS,
+    };
+  }
+
   function compoundClosedForm(config) {
     if (config.compoundStrike <= 1e-12) return blackScholes(config);
     const remaining = config.maturity - config.decisionTime;
@@ -624,9 +759,13 @@
         for (let offset = 0; offset < column; offset += 1) {
           value -= lower[row][offset] * lower[column][offset];
         }
+        // Semidefinite pivot guard: at |rho| = 1 the matrix is rank-1 and
+        // the diagonal pivot hits exactly zero -- dividing would give 0/0
+        // NaNs. Zeroing the column instead yields the correct comonotone
+        // limit (every asset driven by the first normal).
         lower[row][column] = row === column
           ? Math.sqrt(Math.max(value, 0.0))
-          : value / lower[column][column];
+          : (Math.abs(lower[column][column]) > 1e-14 ? value / lower[column][column] : 0.0);
       }
     }
     const correlated = new Float64Array(count);
@@ -1313,8 +1452,10 @@
   const PRODUCT_METHODS = {
     american: ["pde-projection", "pde-psor", "pde-penalty"],
     digital: ["closed-form", "pde", "mc", "qmc"],
-    barrier: ["closed-form", "pde", "mc", "qmc"],
-    "double-barrier": ["semi-closed", "pde", "mc", "qmc"],
+    barrier: ["closed-form", "closed-form-daily", "closed-form-weekly", "closed-form-terminal",
+      "pde", "mc", "qmc"],
+    "double-barrier": ["semi-closed", "closed-form-daily", "closed-form-weekly",
+      "closed-form-terminal", "pde", "mc", "qmc"],
     bermudan: ["tree", "pde", "mc", "qmc"],
     rainbow: ["mc", "qmc"],
     autocallable: ["mc", "qmc"],
@@ -1408,8 +1549,12 @@
     }
     if (config.paths < 100 || config.paths > 500000) throw new Error("Paths must be between 100 and 500,000.");
     if (config.product === "rainbow" || config.product === "himalayan") {
-      if (config.assetCount < 2 || config.assetCount > 20) {
-        throw new Error("Basket asset count must be between 2 and 20.");
+      // Floor of 1, not 2: a one-asset basket is a legitimate degenerate
+      // case (himalayan reduces to a single locked return, rainbow to the
+      // vanilla) and the payoff-reduction test suite exercises it. The UI
+      // keeps min=2 on its input; only the engine accepts 1.
+      if (config.assetCount < 1 || config.assetCount > 20) {
+        throw new Error("Basket asset count must be between 1 and 20.");
       }
       if (config.assetSpots.length < config.assetCount - 1
         || config.assetVolatilities.length < config.assetCount - 1
@@ -1467,15 +1612,50 @@
       };
     }
     else if (method === "tree") result = bermudanTree(config);
+    // The new-method branches must sit BEFORE the product fallbacks below:
+    // the tail of this chain dispatches on product, not method, so a late
+    // insertion would silently return the unadjusted continuous price.
+    else if (method === "closed-form-daily" || method === "closed-form-weekly" ||
+      method === "closed-form-terminal") {
+      const isDouble = config.product === "double-barrier";
+      let value;
+      let benchmarkKind;
+      let benchmarkSteps;
+      if (method === "closed-form-terminal") {
+        value = isDouble
+          ? doubleBarrierTerminalClosedForm(config)
+          : barrierTerminalClosedForm(config);
+        benchmarkKind = "terminal-qmc";
+        benchmarkSteps = 1;
+      } else {
+        const frequency = method === "closed-form-daily" ? 252 : 52;
+        const shifted = bgkShiftedConfig(config, frequency);
+        value = isDouble ? doubleBarrierSpectral(shifted) : barrierClosedForm(shifted);
+        benchmarkKind = "discrete-qmc";
+        benchmarkSteps = Math.max(1, Math.round(frequency * config.maturity));
+      }
+      result = {
+        price: value, standardError: null, standardDeviation: null, samples: 0,
+        benchmark: attachBarrierBenchmark(config, value, benchmarkKind, benchmarkSteps),
+      };
+    }
     else if (config.product === "digital") result = {
       price: digitalClosedForm(config), standardError: null, standardDeviation: null, samples: 0,
     };
-    else if (config.product === "barrier") result = {
-      price: barrierClosedForm(config), standardError: null, standardDeviation: null, samples: 0,
-    };
-    else if (config.product === "double-barrier") result = {
-      price: doubleBarrierSpectral(config), standardError: null, standardDeviation: null, samples: 96,
-    };
+    else if (config.product === "barrier") {
+      const value = barrierClosedForm(config);
+      result = {
+        price: value, standardError: null, standardDeviation: null, samples: 0,
+        benchmark: attachBarrierBenchmark(config, value, "bridge-qmc"),
+      };
+    }
+    else if (config.product === "double-barrier") {
+      const value = doubleBarrierSpectral(config);
+      result = {
+        price: value, standardError: null, standardDeviation: null, samples: 96,
+        benchmark: attachBarrierBenchmark(config, value, "bridge-qmc"),
+      };
+    }
     else if (config.product === "compound") result = {
       price: compoundClosedForm(config), standardError: null, standardDeviation: null, samples: 0,
     };
@@ -1659,19 +1839,19 @@
 
     add("rainbow", "Best-of call selects the higher asset",
       { asset1: 120, asset2: 90, strike: 100, type: "call", style: "best" },
-      20, () => rainbowPayoff(120, 90, 100, "call", "best"),
+      20, () => rainbowPayoff([120, 90], 100, "call", "best"),
       "The best-of call uses the 120 asset and pays 20.");
     add("rainbow", "Worst-of call selects the lower asset",
       { asset1: 120, asset2: 90, strike: 100, type: "call", style: "worst" },
-      0, () => rainbowPayoff(120, 90, 100, "call", "worst"),
+      0, () => rainbowPayoff([120, 90], 100, "call", "worst"),
       "The lower asset is below strike, so the worst-of call expires worthless.");
     add("rainbow", "Best-of put selects the higher asset",
       { asset1: 120, asset2: 90, strike: 100, type: "put", style: "best" },
-      0, () => rainbowPayoff(120, 90, 100, "put", "best"),
+      0, () => rainbowPayoff([120, 90], 100, "put", "best"),
       "The higher asset is above strike, so the best-of put expires worthless.");
     add("rainbow", "Worst-of put selects the lower asset",
       { asset1: 120, asset2: 90, strike: 100, type: "put", style: "worst" },
-      10, () => rainbowPayoff(120, 90, 100, "put", "worst"),
+      10, () => rainbowPayoff([120, 90], 100, "put", "worst"),
       "The worst-of put uses the 90 asset and pays 10.");
 
     const autocallConfig = {
@@ -1857,9 +2037,16 @@
       "With no reachable rung, the ladder payoff is vanilla.",
     ));
 
+    // The second asset must be identical to the first. `base` is already a
+    // normalized config, so it carries assetSpots/assetVolatilities/
+    // assetDividendYields arrays that would SHADOW any spot2/volatility2
+    // scalar overrides (normalizeConfig prefers the array form) -- pass the
+    // arrays explicitly so the reduction actually holds, and pin assetCount
+    // to 2 (base's default of 3 would add a third, differently-vol asset).
     const rainbow = normalizeConfig({
-      ...base, product: "rainbow", spot2: base.spot, volatility2: base.volatility,
-      dividendYield2: base.dividendYield, correlation: 1.0, rainbowStyle: "best",
+      ...base, product: "rainbow", assetCount: 2,
+      assetSpots: [base.spot], assetVolatilities: [base.volatility],
+      assetDividendYields: [base.dividendYield], correlation: 1.0, rainbowStyle: "best",
     });
     rows.push(benchmark(
       "Rainbow identical-assets reduction",
@@ -2127,6 +2314,11 @@
     digitalClosedForm,
     barrierClosedForm,
     doubleBarrierSpectral,
+    bgkShiftedConfig,
+    truncatedVanilla,
+    barrierTerminalClosedForm,
+    doubleBarrierTerminalClosedForm,
+    discreteBarrierQmc,
     compoundClosedForm,
     pdePrice,
     pdeSolve,

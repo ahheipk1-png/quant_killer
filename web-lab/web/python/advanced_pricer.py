@@ -138,8 +138,13 @@ def _correlate(values, correlation):
                 value -= lower[row][offset] * lower[column][offset]
             if row == column:
                 lower[row][column] = math.sqrt(max(value, 0.0))
-            else:
+            elif abs(lower[column][column]) > 1e-14:
                 lower[row][column] = value / lower[column][column]
+            else:
+                # Semidefinite pivot guard (matches the JS engines): at
+                # |rho| = 1 the pivot is exactly zero and dividing would
+                # give 0/0 NaNs instead of the comonotone limit.
+                lower[row][column] = 0.0
     correlated = [0.0] * count
     for row in range(count):
         for column in range(row + 1):

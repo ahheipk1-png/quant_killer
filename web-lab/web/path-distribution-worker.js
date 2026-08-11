@@ -1,6 +1,6 @@
 "use strict";
 
-importScripts("exotic-pricer.js?v=7", "advanced-pricer.js?v=6");
+importScripts("exotic-pricer.js?v=10", "advanced-pricer.js?v=7");
 
 const QUANTILES = [0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99];
 

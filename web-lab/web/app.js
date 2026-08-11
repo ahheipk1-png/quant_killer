@@ -560,6 +560,8 @@ function createInstrumentPanel(prefillEntry) {
   const samplingRow = root.querySelector(".sampling-row");
   const varianceOutput = root.querySelector(".variance-output");
   const varianceRow = root.querySelector(".variance-row");
+  const benchmarkOutput = root.querySelector(".benchmark-output");
+  const benchmarkRow = root.querySelector(".benchmark-row");
   const runtimeOutput = root.querySelector(".runtime-output");
   const workloadOutput = root.querySelector(".workload-output");
   const engineOutput = root.querySelector(".engine-output");
@@ -1005,6 +1007,8 @@ function createInstrumentPanel(prefillEntry) {
     payoffOutput.textContent = inputs.exerciseStyle === "american"
       ? `${payoffFormula} · early exercise allowed`
       : payoffFormula;
+    // Vanilla results never carry an attached MC benchmark (exotic-only).
+    benchmarkRow.hidden = true;
 
     if (isMonteCarlo) {
       const hasStatisticalInterval = inputs.sampling !== "sobol";
@@ -1093,6 +1097,14 @@ function createInstrumentPanel(prefillEntry) {
     stdRow.hidden = true;
     samplingRow.hidden = true;
     varianceRow.hidden = true;
+    benchmarkRow.hidden = !result.benchmark;
+    if (result.benchmark) {
+      const bench = result.benchmark;
+      benchmarkOutput.textContent =
+        `${ExoticFields.formatNumber(bench.price)} · diff ${ExoticFields.formatNumber(bench.difference)}`
+        + (bench.standardError != null ? ` · SE ${ExoticFields.formatNumber(bench.standardError)}` : "")
+        + ` · ${bench.kind}`;
+    }
     runtimeOutput.textContent = `${result.elapsedMs.toFixed(1)} ms`;
     engineOutput.textContent = engine.detail;
     // Simpler than exotics.js's own workload text for pde/adi (it reports

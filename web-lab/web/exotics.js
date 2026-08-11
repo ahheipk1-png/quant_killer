@@ -259,6 +259,15 @@ function renderResult(result) {
   else if (result.method === "semi-closed") workload = "96 spectral modes";
   else if (result.method === "static-replication") workload = "Numerical OTM option strip";
   document.querySelector("#workload-output").textContent = workload;
+  const benchmarkRow = document.querySelector("#benchmark-check-row");
+  benchmarkRow.hidden = !result.benchmark;
+  if (result.benchmark) {
+    const bench = result.benchmark;
+    document.querySelector("#benchmark-check-output").textContent =
+      `${formatNumber(bench.price)} · diff ${formatNumber(bench.difference)}`
+      + (bench.standardError != null ? ` · SE ${formatNumber(bench.standardError)}` : "")
+      + ` · ${bench.kind}`;
+  }
   resultPanel.hidden = false;
 }
 

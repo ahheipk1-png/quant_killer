@@ -290,9 +290,12 @@
       for (let column = 0; column <= row; column += 1) {
         let value = row === column ? 1.0 : correlation;
         for (let offset = 0; offset < column; offset += 1) value -= lower[row][offset] * lower[column][offset];
+        // Semidefinite pivot guard (matches exotic-pricer.js and the Python
+        // engine): |rho| = 1 makes the pivot exactly zero; dividing would
+        // produce 0/0 NaNs instead of the correct comonotone limit.
         lower[row][column] = row === column
           ? Math.sqrt(Math.max(value, 0.0))
-          : value / lower[column][column];
+          : (Math.abs(lower[column][column]) > 1e-14 ? value / lower[column][column] : 0.0);
       }
     }
     const correlated = new Float64Array(count);
