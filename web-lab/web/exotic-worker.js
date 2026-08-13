@@ -1,4 +1,4 @@
-importScripts("exotic-pricer.js?v=16");
+importScripts("exotic-pricer.js?v=18");
 importScripts("advanced-pricer.js?v=15");
 
 postMessage({
