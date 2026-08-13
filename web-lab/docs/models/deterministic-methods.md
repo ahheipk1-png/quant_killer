@@ -46,6 +46,12 @@ For discrete arithmetic averages under constant Black-Scholes volatility:
 - Shifted lognormal uses three moments.
 - Curran conditions on the geometric average.
 - Curran two-moment adds a conditional moment fit.
+
+The two Curran variants are derived step by step in
+[curran-derivation.md](curran-derivation.md), including the point that their
+"one-moment"/"two-moment" labels count *conditional* moments used inside the
+quadrature, and are unrelated to the moment counts in Levy and shifted
+lognormal above.
 - Ju's method applies the implemented characteristic-function/Taylor correction through volatility order six.
 
 The schedules may be uneven and can include the initial fixing. Positive-weight effective baskets are supported by the JavaScript reference calculations where documented by the tests.
