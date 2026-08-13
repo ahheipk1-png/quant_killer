@@ -91,7 +91,7 @@
     "pde-projection": "Crank–Nicolson continuation solve followed by projection to the American exercise obstacle.",
     "pde-psor": "Projected SOR solves the American linear-complementarity problem at every time step.",
     "pde-penalty": "A semi-smooth active-set penalty iteration enforces the American exercise obstacle.",
-    "closed-form": "Analytic or semi-analytic constant-volatility formula (continuous monitoring for barriers).",
+    "closed-form": "Analytic or semi-analytic constant-volatility formula (continuous monitoring for barriers). For a basket barrier this prices the moment-matched effective GBM, and its Monte Carlo check is that same effective GBM run through the bridge-corrected single-asset engine — so the check validates the formula against its own approximation, NOT how closely that approximation tracks the true multi-asset basket.",
     "semi-closed": "Absorbing-boundary spectral series with numerical payoff integration (continuous monitoring).",
     "closed-form-daily": "Continuous formula with the Broadie–Glasserman–Kou barrier shift exp(±0.5826·σ·√Δt), Δt = 1/252. A matched 252-obs/yr Sobol MC error check is attached to the result.",
     "closed-form-weekly": "Continuous formula with the Broadie–Glasserman–Kou barrier shift exp(±0.5826·σ·√Δt), Δt = 1/52. A matched 52-obs/yr Sobol MC error check is attached to the result.",
@@ -138,7 +138,8 @@
   const basketMethodsByPayoff = {
     vanilla: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "mc", "qmc"],
     digital: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "mc", "qmc"],
-    barrier: ["closed-form-daily", "closed-form-weekly", "closed-form-terminal", "mc", "qmc"],
+    barrier: ["closed-form", "closed-form-daily", "closed-form-weekly", "closed-form-terminal",
+      "mc", "qmc"],
   };
   const basketMethodsFor = (payoffMode) => basketMethodsByPayoff[payoffMode] || basketMethodsByPayoff.vanilla;
 
@@ -193,12 +194,18 @@
     basket: [
       select("assetCount", "Asset count", [["2", "Two"], ["3", "Three"]], "2"),
       select("basketPayoff", "Basket payoff", [
-        ["vanilla", "Vanilla call/put"], ["digital", "Digital / binary"], ["barrier", "Single barrier"],
+        ["vanilla", "Vanilla call/put"], ["digital", "Digital / binary"], ["barrier", "Barrier"],
       ], "vanilla"),
       { name: "cashPayoff", label: "Cash payoff", value: 10, min: 0, step: "any" },
+      select("basketBarrierKind", "Barrier kind", [
+        ["single", "Single barrier"], ["double", "Double barrier"],
+      ], "single"),
       { name: "barrier", label: "Barrier level", value: 125, min: 0.0001, step: "any" },
       select("barrierDirection", "Barrier direction", [["up", "Up"], ["down", "Down"]]),
+      { name: "lowerBarrier", label: "Lower barrier", value: 70, min: 0.0001, step: "any" },
+      { name: "upperBarrier", label: "Upper barrier", value: 130, min: 0.0001, step: "any" },
       select("barrierStyle", "Barrier style", [["out", "Knock-out"], ["in", "Knock-in"]]),
+      ...rebateFields(),
     ],
     autocallable: [
       { name: "notional", label: "Notional", value: 100, min: 0.01, step: "any" }, percent("coupon", "Coupon per observation", 2),

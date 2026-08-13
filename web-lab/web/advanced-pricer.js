@@ -48,7 +48,7 @@
     // barrier) -- price() validates the actual method/sub-mode combination;
     // the UI (ExoticFields.basketMethodsFor) narrows the dropdown per mode.
     basket: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor",
-      "closed-form-daily", "closed-form-weekly", "closed-form-terminal", "mc", "qmc"],
+      "closed-form", "closed-form-daily", "closed-form-weekly", "closed-form-terminal", "mc", "qmc"],
     "phoenix-autocall": ["mc", "qmc"],
     "variance-swap": ["static-replication", "mc", "qmc"],
     "volatility-swap": ["mc", "qmc"],
@@ -184,6 +184,7 @@
       pdeTimeSteps: Math.trunc(Number(input.pdeTimeSteps ?? 220)),
       underlyingMode: input.underlyingMode || "single",
       basketPayoff: input.basketPayoff || "vanilla",
+      basketBarrierKind: input.basketBarrierKind || "single",
       basketAssetCount: Math.trunc(Number(input.basketAssetCount ?? 3)),
       basketWeights: Array.isArray(input.basketWeights)
         ? input.basketWeights.map(Number)
@@ -473,12 +474,28 @@
         return discount * Base.digitalPayoff(terminal, config.strike, config.optionType, config.cashPayoff);
       }
       if (config.basketPayoff === "barrier") {
-        const hit = Array.from({ length: schedule.length }, (_, step) => basketAt(step))
-          .some((value) => config.barrierDirection === "up"
-            ? value >= config.barrier : value <= config.barrier);
-        return discount * Base.singleBarrierPayoff(
+        const isDouble = config.basketBarrierKind === "double";
+        const levels = Array.from({ length: schedule.length }, (_, step) => basketAt(step));
+        const hit = levels.some((value) => (isDouble
+          ? value <= config.lowerBarrier || value >= config.upperBarrier
+          : config.barrierDirection === "up" ? value >= config.barrier : value <= config.barrier));
+        const payoffFunction = isDouble ? Base.doubleBarrierPayoff : Base.singleBarrierPayoff;
+        const option = discount * payoffFunction(
           terminal, config.strike, config.optionType, hit ? 0 : 1, config.barrierStyle,
         );
+        const rebate = Number(config.rebate) || 0.0;
+        if (rebate === 0.0) return option;
+        // Discrete monitoring knows the exact breach fixing, so "at hit"
+        // discounts to it; knock-in rebates always pay at expiry.
+        const isIn = config.barrierStyle === "in";
+        if (config.rebateTiming === "hit" && !isIn) {
+          if (!hit) return option;
+          const hitStep = levels.findIndex((value) => (isDouble
+            ? value <= config.lowerBarrier || value >= config.upperBarrier
+            : config.barrierDirection === "up" ? value >= config.barrier : value <= config.barrier));
+          return option + rebate * Math.exp(-config.rate * schedule[hitStep]);
+        }
+        return option + ((isIn ? !hit : hit) ? rebate * discount : 0.0);
       }
       return discount * Base.vanillaPayoff(terminal, config.strike, config.optionType);
     }
@@ -1377,15 +1394,24 @@
     };
   }
 
-  function basketBarrierTerminalPrice(config) {
-    const effective = { ...basketEffectiveConfig(config), product: "barrier" };
-    return Base.barrierTerminalClosedForm(effective);
-  }
-
-  function basketBarrierContinuousPrice(config, frequency) {
-    const effective = { ...basketEffectiveConfig(config), product: "barrier" };
-    if (frequency == null) return Base.barrierClosedForm(effective);
-    return Base.barrierClosedForm(Base.bgkShiftedConfig(effective, frequency));
+  // The effective-GBM config is handed to whichever single-asset barrier
+  // closed form matches the requested kind (single/double) and monitoring
+  // (terminal / BGK-shifted discrete / continuous). Rebate fields ride along
+  // in the spread, so a basket barrier rebate is priced by exactly the same
+  // formulas as a single-asset one, on the effective underlying.
+  function basketBarrierPrice(config, monitoring, frequency) {
+    const isDouble = config.basketBarrierKind === "double";
+    const effective = {
+      ...basketEffectiveConfig(config),
+      product: isDouble ? "double-barrier" : "barrier",
+    };
+    if (monitoring === "terminal") {
+      return isDouble
+        ? Base.doubleBarrierTerminalClosedForm(effective)
+        : Base.barrierTerminalClosedForm(effective);
+    }
+    const monitored = frequency == null ? effective : Base.bgkShiftedConfig(effective, frequency);
+    return isDouble ? Base.doubleBarrierSpectral(monitored) : Base.barrierClosedForm(monitored);
   }
 
   function thomasSolve(lower, diagonal, upper, right) {
@@ -1655,6 +1681,7 @@
       }
       let value;
       let benchmarkSteps;
+      let continuousBenchmark = false;
       if (config.basketPayoff === "digital") {
         const prices = {
           levy: (cfg) => basketDigitalPrice(cfg, "levy"),
@@ -1667,23 +1694,26 @@
         value = prices[method](config);
         benchmarkSteps = 1;
       } else if (config.basketPayoff === "barrier") {
-        // No plain-continuous entry: AdvancedPricer's Monte Carlo is a
-        // discrete indicator with no Brownian-bridge correction (that
-        // machinery lives only in ExoticPricer's single-asset engine), so a
-        // continuous closed form would auto-benchmark against a mismatched
-        // discrete MC and silently reproduce the exact discrete-vs-continuous
-        // bias the BGK correction exists to fix. Only offer methods whose MC
-        // counterparty is genuinely apples-to-apples: matched-frequency BGK
-        // or single-step terminal.
         const frequency = { "closed-form-daily": 252, "closed-form-weekly": 52 }[method];
         if (method === "closed-form-terminal") {
-          value = basketBarrierTerminalPrice(config);
+          value = basketBarrierPrice(config, "terminal", null);
           benchmarkSteps = 1;
         } else if (frequency) {
-          value = basketBarrierContinuousPrice(config, frequency);
+          value = basketBarrierPrice(config, "discrete", frequency);
           benchmarkSteps = Math.max(1, Math.round(frequency * config.maturity));
+        } else if (method === "closed-form") {
+          // Continuous monitoring. AdvancedPricer's own basket MC is a plain
+          // discrete indicator with no Brownian-bridge correction, so it is
+          // NOT a valid counterparty here -- benchmarking against it would
+          // reproduce the very discrete-vs-continuous bias the BGK shift
+          // exists to remove. Instead benchmark against ExoticPricer's
+          // bridge-corrected single-asset engine run on the same effective
+          // GBM the closed form itself uses. See the methodNotes entry for
+          // exactly what that does and does not establish.
+          value = basketBarrierPrice(config, "continuous", null);
+          continuousBenchmark = true;
         } else {
-          throw new Error(`${method} is not available for a basket barrier; only the daily/weekly BGK and terminal effective-lognormal closed forms extend to path-dependent payoffs (no plain continuous entry -- see basket barrier methodNotes).`);
+          throw new Error(`${method} is not available for a basket barrier; use the continuous, daily/weekly BGK, or terminal effective-lognormal closed forms, or MC/QMC.`);
         }
       } else {
         const prices = {
@@ -1699,9 +1729,15 @@
       }
       // Deterministic Sobol check with zero digital shift, matching the
       // barrier benchmark convention -- reproducible without seed plumbing.
-      const check = monteCarloPrice(
-        { ...config, paths: 32768, randomizedQmc: false, monitoringSteps: benchmarkSteps }, "qmc",
-      );
+      const check = continuousBenchmark
+        ? Base.price({
+          ...basketEffectiveConfig(config),
+          product: config.basketBarrierKind === "double" ? "double-barrier" : "barrier",
+          paths: 32768, randomizedQmc: false, monitoringSteps: 16,
+        }, "qmc")
+        : monteCarloPrice(
+          { ...config, paths: 32768, randomizedQmc: false, monitoringSteps: benchmarkSteps }, "qmc",
+        );
       result = {
         price: value, standardError: null, standardDeviation: null, samples: 0,
         benchmark: {
@@ -1709,7 +1745,7 @@
           standardError: check.standardDeviation != null
             ? check.standardDeviation / Math.sqrt(32768) : null,
           difference: value - check.price,
-          kind: "basket-qmc",
+          kind: continuousBenchmark ? "effective-bridge-qmc" : "basket-qmc",
           samples: 32768,
         },
       };
@@ -1936,8 +1972,7 @@
     conditionalBasketDigitalPrice,
     juBasketDigitalPrice,
     basketEffectiveConfig,
-    basketBarrierTerminalPrice,
-    basketBarrierContinuousPrice,
+    basketBarrierPrice,
     asianAdiPrice,
     generalizedCompoundClosedForm,
     staticVarianceSwapPrice,

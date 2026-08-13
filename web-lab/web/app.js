@@ -570,6 +570,7 @@ function createInstrumentPanel(prefillEntry) {
   const scheduleModeSelect = root.querySelector('.module-dialog[data-module="contractual"] [name="scheduleMode"]');
   const assetCountInput = root.querySelector('[name="assetCount"]');
   const basketPayoffSelect = root.querySelector('[name="basketPayoff"]');
+  const basketBarrierKindSelect = root.querySelector('[name="basketBarrierKind"]');
   const basketAssetsList = root.querySelector('[data-basket-assets]');
   const basketAddAssetButton = root.querySelector('.basket-add-asset');
   const observationDatesList = root.querySelector('[data-observation-dates]');
@@ -873,17 +874,21 @@ function createInstrumentPanel(prefillEntry) {
     });
 
     // Second, narrower pass: within the basket product, cashPayoff and the
-    // barrier trio are further gated by the basket-payoff sub-mode select
+    // barrier fields are further gated by the basket-payoff sub-mode select
     // (vanilla/digital/barrier) -- data-payoff-only alone can't express this
-    // second dimension, since it only keys off the top-level payoffType.
-    const basketPayoff = basketPayoffSelect.value;
-    root.querySelectorAll("[data-basket-payoff-only]").forEach((element) => {
-      const visible = product === "basket" && element.dataset.basketPayoffOnly === basketPayoff;
-      if (product === "basket") {
+    // second dimension, since it only keys off the top-level payoffType --
+    // and the barrier fields are gated again by single-vs-double kind.
+    if (product === "basket") {
+      const basketPayoff = basketPayoffSelect.value;
+      const barrierKind = basketBarrierKindSelect.value;
+      root.querySelectorAll("[data-basket-payoff-only]").forEach((element) => {
+        const kind = element.dataset.basketBarrierKind;
+        const visible = element.dataset.basketPayoffOnly === basketPayoff &&
+          (!kind || kind === barrierKind);
         element.hidden = !visible;
         element.querySelectorAll("input, select").forEach((control) => { control.disabled = !visible; });
-      }
-    });
+      });
+    }
 
     const SCHEDULE_PRODUCTS = new Set([
       "barrier", "double-barrier", "bermudan", "asian", "lookback", "ladder",
@@ -1356,9 +1361,11 @@ function createInstrumentPanel(prefillEntry) {
   });
   exerciseSelect.addEventListener("change", updateMethodOptions);
   payoffTypeSelect.addEventListener("change", updatePayoffVisibility);
-  basketPayoffSelect.addEventListener("change", () => {
-    updatePayoffVisibility();
-    updateExoticMethodOptions();
+  [basketPayoffSelect, basketBarrierKindSelect].forEach((select) => {
+    select.addEventListener("change", () => {
+      updatePayoffVisibility();
+      updateExoticMethodOptions();
+    });
   });
   volatilityModelSelect.addEventListener("change", () => {
     renderExoticVolatilityFields();

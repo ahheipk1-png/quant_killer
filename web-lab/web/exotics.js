@@ -75,10 +75,20 @@ function renderProductFields() {
 function updateBasketPayoffFields() {
   if (productSelect.value !== "basket") return;
   const mode = form.elements.basketPayoff?.value || "vanilla";
+  const kind = form.elements.basketBarrierKind?.value || "single";
+  const isBarrier = mode === "barrier";
   for (const element of productFields.querySelectorAll("[data-field-name]")) {
     const name = element.dataset.fieldName;
     if (name === "cashPayoff") element.hidden = mode !== "digital";
-    if (["barrier", "barrierDirection", "barrierStyle"].includes(name)) element.hidden = mode !== "barrier";
+    if (["basketBarrierKind", "barrierStyle", "rebate", "rebateTiming"].includes(name)) {
+      element.hidden = !isBarrier;
+    }
+    if (["barrier", "barrierDirection"].includes(name)) {
+      element.hidden = !isBarrier || kind !== "single";
+    }
+    if (["lowerBarrier", "upperBarrier"].includes(name)) {
+      element.hidden = !isBarrier || kind !== "double";
+    }
   }
 }
 
@@ -376,7 +386,7 @@ methodSelect.addEventListener("change", updateMethodFields);
 // basketPayoff select is a fresh element each time -- delegate instead of
 // binding a listener to an element that gets thrown away.
 productFields.addEventListener("change", (event) => {
-  if (event.target.name === "basketPayoff") {
+  if (event.target.name === "basketPayoff" || event.target.name === "basketBarrierKind") {
     updateBasketPayoffFields();
     updateMethodOptions();
   }
