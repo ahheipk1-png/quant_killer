@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="exotics.css?v=3">
     <script src="polyglot-contract.js" defer></script>
     <script src="holiday-calendars.js?v=1" defer></script>
-    <script src="exotic-fields.js?v=9" defer></script>
-    <script src="app.js?v=20" defer></script>
+    <script src="exotic-fields.js?v=10" defer></script>
+    <script src="app.js?v=21" defer></script>
   </head>
   <body>
     <main class="page-shell">
@@ -223,6 +223,17 @@
                 <select name="barrierStyle">
                   <option value="out">Knock-out</option>
                   <option value="in">Knock-in</option>
+                </select>
+              </label>
+              <label class="field" data-payoff-only="barrier,double-barrier,basket" data-basket-payoff-only="barrier">
+                Rebate
+                <input name="rebate" type="number" min="0" step="any" value="0">
+              </label>
+              <label class="field" data-payoff-only="barrier,double-barrier,basket" data-basket-payoff-only="barrier">
+                Rebate timing
+                <select name="rebateTiming">
+                  <option value="hit">Paid when barrier is hit</option>
+                  <option value="expiry">Paid at expiry</option>
                 </select>
               </label>
               <label class="field" data-payoff-only="digital,barrier,double-barrier,rainbow,autocallable,phoenix-autocall,yield-seeker,himalayan,asian,lookback,ladder,compound,variance-swap,volatility-swap,variance-option,volatility-option,accumulator">

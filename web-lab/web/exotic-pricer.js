@@ -353,17 +353,164 @@
     return Math.max(result, 0.0);
   }
 
+  // Risk-neutral probability that a continuously monitored single barrier is
+  // NEVER touched before maturity -- the reflection-principle pair that also
+  // sits inside barrierOutClosedForm's b/d terms, isolated here because both
+  // rebate timings and the knock-in/knock-out split are built from it.
+  function barrierNoTouchProbability(config) {
+    const { spot: s, barrier: h, rate: r, dividendYield: q,
+      volatility: sigma, maturity: t, barrierDirection } = config;
+    const eta = barrierDirection === "down" ? 1.0 : -1.0;
+    const variance = sigma * sigma;
+    const rootVariance = sigma * Math.sqrt(t);
+    const mu = (r - q - 0.5 * variance) / variance;
+    const x2 = Math.log(s / h) / rootVariance + (1.0 + mu) * rootVariance;
+    const y2 = Math.log(h / s) / rootVariance + (1.0 + mu) * rootVariance;
+    const imageCash = Math.pow(h / s, 2.0 * mu);
+    return normalCdf(eta * x2 - eta * rootVariance) -
+      imageCash * normalCdf(eta * y2 - eta * rootVariance);
+  }
+
+  // Present value of the rebate leg (Reiner-Rubinstein / Haug E and F).
+  //
+  // "expiry": paid at T, on the knock-out branch if the barrier WAS touched,
+  // on the knock-in branch if it never was -- so out+in rebates sum to
+  // rebate*exp(-rT), exactly one of the two events occurring.
+  //
+  // "hit": paid the instant the barrier is touched, so it discounts over the
+  // random first-passage time rather than to T. Only defined for knock-outs:
+  // touching a knock-in ACTIVATES the option, so there is no consolation
+  // event to pay on -- a knock-in rebate compensates for never coming alive,
+  // which is only known at expiry. Knock-in therefore always uses "expiry".
+  function barrierRebateValue(config) {
+    const rebate = Number(config.rebate) || 0.0;
+    if (!(rebate !== 0.0)) return 0.0;
+    const { spot: s, barrier: h, rate: r, dividendYield: q,
+      volatility: sigma, maturity: t, barrierDirection, barrierStyle } = config;
+    const isDown = barrierDirection === "down";
+    const isIn = barrierStyle === "in";
+    const strikeDiscount = Math.exp(-r * t);
+    const payAtHit = config.rebateTiming === "hit" && !isIn;
+    if ((isDown && s <= h) || (!isDown && s >= h)) {
+      // Already breached: a knock-out is dead and its rebate is due (now, or
+      // at expiry); a knock-in is already alive, so no rebate is ever paid.
+      if (isIn) return 0.0;
+      return payAtHit ? rebate : rebate * strikeDiscount;
+    }
+    const eta = isDown ? 1.0 : -1.0;
+    const variance = sigma * sigma;
+    const rootVariance = sigma * Math.sqrt(t);
+    const mu = (r - q - 0.5 * variance) / variance;
+    if (payAtHit) {
+      const lambda = Math.sqrt(Math.max(mu * mu + 2.0 * r / variance, 0.0));
+      const z = Math.log(h / s) / rootVariance + lambda * rootVariance;
+      return rebate * (
+        Math.pow(h / s, mu + lambda) * normalCdf(eta * z) +
+        Math.pow(h / s, mu - lambda) * normalCdf(eta * z - 2.0 * eta * lambda * rootVariance)
+      );
+    }
+    const noTouch = barrierNoTouchProbability(config);
+    return rebate * strikeDiscount * (isIn ? noTouch : 1.0 - noTouch);
+  }
+
   function barrierClosedForm(config) {
     const vanilla = blackScholes(config);
     const out = barrierOutClosedForm(config);
-    return config.barrierStyle === "in" ? Math.max(vanilla - out, 0.0) : out;
+    const option = config.barrierStyle === "in" ? Math.max(vanilla - out, 0.0) : out;
+    return option + barrierRebateValue(config);
+  }
+
+  // Spectral decomposition of the double-barrier SURVIVAL function:
+  //   S(t) = sum_n coefficient_n * exp(-decayRate_n * t),
+  // in the same eigenbasis doubleBarrierSpectral's price integral uses
+  // (sin(wave_n * u) on the strip, eigenvalue 0.5*sigma^2*wave_n^2), with the
+  // Girsanov tilt's own 0.5*tilt^2*sigma^2 folded into the decay rate so each
+  // mode is a single clean exponential in t. Integrating the killed density
+  // over the strip needs only the elementary mode integral
+  //   I_n = int_0^width exp(tilt*u)*sin(wave_n*u) du
+  //       = wave_n * (1 - (-1)^n * exp(tilt*width)) / (tilt^2 + wave_n^2).
+  // Having S(t) as an explicit sum of exponentials is what makes the
+  // first-passage (rebate-at-hit) integral below closed-form rather than
+  // another quadrature.
+  function doubleBarrierSurvivalModes(config) {
+    const { spot, lowerBarrier: lower, upperBarrier: upper,
+      rate, dividendYield, volatility } = config;
+    const width = Math.log(upper) - Math.log(lower);
+    const start = Math.log(spot) - Math.log(lower);
+    const variance = volatility * volatility;
+    const tilt = (rate - dividendYield - 0.5 * variance) / variance;
+    const modes = 96;
+    const coefficients = new Float64Array(modes);
+    const decayRates = new Float64Array(modes);
+    const tiltDecay = 0.5 * tilt * tilt * variance;
+    const tiltGrowth = Math.exp(tilt * width);
+    for (let mode = 1; mode <= modes; mode += 1) {
+      const wave = mode * Math.PI / width;
+      const parity = mode % 2 ? -1.0 : 1.0;
+      const modeIntegral = wave * (1.0 - parity * tiltGrowth) / (tilt * tilt + wave * wave);
+      coefficients[mode - 1] = (2.0 / width) * Math.exp(-tilt * start) *
+        Math.sin(wave * start) * modeIntegral;
+      decayRates[mode - 1] = 0.5 * variance * wave * wave + tiltDecay;
+    }
+    return { coefficients, decayRates };
+  }
+
+  function doubleBarrierSurvivalProbability(config) {
+    if (config.spot <= config.lowerBarrier || config.spot >= config.upperBarrier) return 0.0;
+    const { coefficients, decayRates } = doubleBarrierSurvivalModes(config);
+    let total = 0.0;
+    for (let index = 0; index < coefficients.length; index += 1) {
+      total += coefficients[index] * Math.exp(-decayRates[index] * config.maturity);
+    }
+    return Math.min(Math.max(total, 0.0), 1.0);
+  }
+
+  // Double-barrier rebate.
+  //
+  // "expiry": rebate * discount * P(knocked out) for an out, * P(survived)
+  // for an in -- the two summing to rebate*discount, since exactly one occurs.
+  //
+  // "hit": paid at the first-passage time, so it needs the hitting-time
+  // density rather than just the terminal probability. Differentiating the
+  // survival sum term by term gives that density in closed form,
+  //   f(t) = -S'(t) = sum_n coefficient_n * decayRate_n * exp(-decayRate_n*t),
+  // and its discounted integral over [0, T] collapses to another finite sum:
+  //   E[R*exp(-r*tau)*1{tau<=T}]
+  //     = R * sum_n c_n * mu_n/(r+mu_n) * (1 - exp(-(r+mu_n)*T)).
+  // Same spectral first-passage technique the Kunitomo-Ikeda-style double
+  // barrier formulas rest on, applied directly to this file's own series.
+  function doubleBarrierRebateValue(config) {
+    const rebate = Number(config.rebate) || 0.0;
+    if (!(rebate !== 0.0)) return 0.0;
+    const isIn = config.barrierStyle === "in";
+    const discount = Math.exp(-config.rate * config.maturity);
+    if (config.spot <= config.lowerBarrier || config.spot >= config.upperBarrier) {
+      if (isIn) return 0.0;
+      return config.rebateTiming === "hit" ? rebate : rebate * discount;
+    }
+    // Knock-in rebates only ever pay at expiry (see barrierRebateValue).
+    if (config.rebateTiming === "hit" && !isIn) {
+      const { coefficients, decayRates } = doubleBarrierSurvivalModes(config);
+      let total = 0.0;
+      for (let index = 0; index < coefficients.length; index += 1) {
+        const decay = decayRates[index];
+        const discounted = config.rate + decay;
+        total += coefficients[index] * decay / discounted *
+          (1.0 - Math.exp(-discounted * config.maturity));
+      }
+      return rebate * Math.min(Math.max(total, 0.0), 1.0);
+    }
+    const survival = doubleBarrierSurvivalProbability(config);
+    return rebate * discount * (isIn ? survival : 1.0 - survival);
   }
 
   function doubleBarrierSpectral(config) {
     const vanilla = blackScholes(config);
     const { spot, lowerBarrier: lower, upperBarrier: upper, strike, rate,
       dividendYield, volatility, maturity, optionType } = config;
-    if (spot <= lower || spot >= upper) return config.barrierStyle === "in" ? vanilla : 0.0;
+    if (spot <= lower || spot >= upper) {
+      return (config.barrierStyle === "in" ? vanilla : 0.0) + doubleBarrierRebateValue(config);
+    }
     const logLower = Math.log(lower);
     const logUpper = Math.log(upper);
     const logSpot = Math.log(spot);
@@ -401,7 +548,8 @@
       total += (index % 2 ? 4.0 : 2.0) * integrand(logLower + index * dy);
     }
     const out = Math.max(Math.exp(-rate * maturity) * total * dy / 3.0, 0.0);
-    return config.barrierStyle === "in" ? Math.max(vanilla - out, 0.0) : out;
+    const option = config.barrierStyle === "in" ? Math.max(vanilla - out, 0.0) : out;
+    return option + doubleBarrierRebateValue(config);
   }
 
   // ---- Discrete-monitoring and terminal barrier closed forms ------------
@@ -462,20 +610,43 @@
   // knock-out is just the vanilla payoff truncated to the surviving
   // terminal region. The current spot's position relative to the barrier
   // is deliberately irrelevant here.
+  // Terminal-monitoring rebate. The only observation date IS expiry, so
+  // "paid at hit" and "paid at expiry" are the same cash flow at the same
+  // time -- rebateTiming is deliberately ignored here rather than branched on.
+  function terminalRebateValue(config, touchProbability) {
+    const rebate = Number(config.rebate) || 0.0;
+    if (!(rebate !== 0.0)) return 0.0;
+    const probability = config.barrierStyle === "in"
+      ? 1.0 - touchProbability : touchProbability;
+    return rebate * Math.exp(-config.rate * config.maturity) * probability;
+  }
+
+  function terminalLogProbability(config, level) {
+    return (Math.log(config.spot / level) +
+      (config.rate - config.dividendYield - 0.5 * config.volatility ** 2) * config.maturity) /
+      (config.volatility * Math.sqrt(config.maturity));
+  }
+
   function barrierTerminalClosedForm(config) {
     const out = config.barrierDirection === "down"
       ? truncatedVanilla(config, config.barrier, Infinity)
       : truncatedVanilla(config, 0.0, config.barrier);
-    return config.barrierStyle === "in"
+    const option = config.barrierStyle === "in"
       ? Math.max(blackScholes(config) - out, 0.0)
       : out;
+    const d2 = terminalLogProbability(config, config.barrier);
+    const touch = config.barrierDirection === "down" ? normalCdf(-d2) : normalCdf(d2);
+    return option + terminalRebateValue(config, touch);
   }
 
   function doubleBarrierTerminalClosedForm(config) {
     const out = truncatedVanilla(config, config.lowerBarrier, config.upperBarrier);
-    return config.barrierStyle === "in"
+    const option = config.barrierStyle === "in"
       ? Math.max(blackScholes(config) - out, 0.0)
       : out;
+    const touch = normalCdf(-terminalLogProbability(config, config.lowerBarrier)) +
+      normalCdf(terminalLogProbability(config, config.upperBarrier));
+    return option + terminalRebateValue(config, touch);
   }
 
   // ---- Automatic Monte Carlo error benchmark for the closed forms -------
@@ -496,24 +667,40 @@
     const samples = new Float64Array(BENCHMARK_PATHS);
     const discount = Math.exp(-config.rate * config.maturity);
     const isDouble = config.product === "double-barrier";
+    const rebate = Number(config.rebate) || 0.0;
+    const isIn = config.barrierStyle === "in";
+    const payRebateAtHit = rebate !== 0.0 && config.rebateTiming === "hit" && !isIn;
+    const dt = config.maturity / steps;
     for (let pathIndex = 0; pathIndex < BENCHMARK_PATHS; pathIndex += 1) {
       const normals = pathNormals(pathIndex, steps, "qmc", null, shifts);
       const path = simulateGbmPath(config, normals);
       let knocked = false;
-      for (const value of path) {
+      let hitStep = -1;
+      for (let step = 0; step < path.length; step += 1) {
+        const value = path[step];
         const hit = isDouble
           ? (value <= config.lowerBarrier || value >= config.upperBarrier)
           : (config.barrierDirection === "down"
             ? value <= config.barrier : value >= config.barrier);
         if (hit) {
           knocked = true;
+          hitStep = step;
           break;
         }
       }
-      const pays = config.barrierStyle === "in" ? knocked : !knocked;
+      const pays = isIn ? knocked : !knocked;
       samples[pathIndex] = pays
         ? discount * vanillaPayoff(path[path.length - 1], config.strike, config.optionType)
         : 0.0;
+      if (rebate !== 0.0) {
+        // Discrete monitoring knows the exact observation the barrier was
+        // breached on, so "at hit" discounts to that fixing rather than to T.
+        if (payRebateAtHit) {
+          if (knocked) samples[pathIndex] += rebate * Math.exp(-config.rate * (hitStep + 1) * dt);
+        } else if (isIn ? !knocked : knocked) {
+          samples[pathIndex] += rebate * discount;
+        }
+      }
     }
     const summary = summarizeSamples(samples, "mc");
     return {
@@ -910,24 +1097,40 @@
     if (config.product === "barrier" || config.product === "double-barrier") {
       const dt = config.maturity / steps;
       const varianceDt = config.volatility ** 2 * dt;
+      const rebate = Number(config.rebate) || 0.0;
+      // Knock-in rebates only ever pay at expiry (see barrierRebateValue).
+      const payRebateAtHit = rebate !== 0.0 && config.rebateTiming === "hit" &&
+        config.barrierStyle !== "in";
       let survival = 1.0;
       let previous = config.spot;
+      let rebateAtHit = 0.0;
+      let stepIndex = 0;
       for (const value of path) {
-        if (config.product === "barrier") {
-          survival *= bridgeSurvival(previous, value, config.barrier,
-            config.barrierDirection, varianceDt);
-        } else {
-          survival *= bridgeSurvival(previous, value, config.upperBarrier, "up", varianceDt);
-          survival *= bridgeSurvival(previous, value, config.lowerBarrier, "down", varianceDt);
+        const stepSurvival = config.product === "barrier"
+          ? bridgeSurvival(previous, value, config.barrier, config.barrierDirection, varianceDt)
+          : bridgeSurvival(previous, value, config.upperBarrier, "up", varianceDt) *
+            bridgeSurvival(previous, value, config.lowerBarrier, "down", varianceDt);
+        if (payRebateAtHit) {
+          // First-passage mass landing inside this step. The bridge gives the
+          // crossing probability for the whole interval but not where in it,
+          // so discount at the step midpoint as the representative hit time.
+          rebateAtHit += survival * (1.0 - stepSurvival) * rebate *
+            Math.exp(-config.rate * (stepIndex + 0.5) * dt);
         }
+        survival *= stepSurvival;
         previous = value;
+        stepIndex += 1;
       }
       const payoffFunction = config.product === "barrier"
         ? singleBarrierPayoff
         : doubleBarrierPayoff;
-      return Math.exp(-config.rate * config.maturity) * payoffFunction(
+      const option = Math.exp(-config.rate * config.maturity) * payoffFunction(
         terminal, config.strike, config.optionType, survival, config.barrierStyle,
       );
+      if (rebate === 0.0) return option;
+      if (payRebateAtHit) return option + rebateAtHit;
+      const probability = config.barrierStyle === "in" ? survival : 1.0 - survival;
+      return option + rebate * Math.exp(-config.rate * config.maturity) * probability;
     }
     throw new Error(`Monte Carlo is not configured for ${config.product}.`);
   }
@@ -1510,6 +1713,8 @@
       barrier: Number(input.barrier ?? 125),
       barrierDirection: input.barrierDirection || "up",
       barrierStyle: input.barrierStyle || "out",
+      rebate: Number(input.rebate ?? 0),
+      rebateTiming: input.rebateTiming || "hit",
       lowerBarrier: Number(input.lowerBarrier ?? 70),
       upperBarrier: Number(input.upperBarrier ?? 130),
       exerciseDates: Math.trunc(Number(input.exerciseDates ?? 4)),
@@ -2315,7 +2520,12 @@
     compoundPayoff,
     digitalClosedForm,
     barrierClosedForm,
+    barrierNoTouchProbability,
+    barrierRebateValue,
     doubleBarrierSpectral,
+    doubleBarrierSurvivalModes,
+    doubleBarrierSurvivalProbability,
+    doubleBarrierRebateValue,
     bgkShiftedConfig,
     truncatedVanilla,
     barrierTerminalClosedForm,

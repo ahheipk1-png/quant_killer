@@ -144,6 +144,15 @@
 
   const percent = (name, label, value, extra = {}) => ({ name, label, value, suffix: "%", transform: "percent", min: 0, step: "any", ...extra });
   const select = (name, label, options, value) => ({ name, label, type: "select", options, value });
+
+  // Rebate defaults to 0, which is a no-op in every closed form -- adding
+  // these fields cannot move an existing price.
+  const rebateFields = () => [
+    { name: "rebate", label: "Rebate", value: 0, min: 0, step: "any" },
+    select("rebateTiming", "Rebate timing", [
+      ["hit", "Paid when barrier is hit"], ["expiry", "Paid at expiry"],
+    ], "hit"),
+  ];
   const scheduleFields = (count = 12, countLabel = "Equal observation dates") => [
     { name: "monitoringSteps", label: countLabel, value: count, min: 1, max: 260, step: 1 },
     select("scheduleMode", "Observation schedule", [["equal", "Equally spaced"], ["business-monthly", "Monthly business day"], ["custom", "Custom business dates"]], "equal"),
@@ -159,12 +168,14 @@
     barrier: [
       { name: "barrier", label: "Barrier level", value: 125, min: 0.0001, step: "any" },
       select("barrierDirection", "Barrier direction", [["up", "Up"], ["down", "Down"]]),
-      select("barrierStyle", "Barrier style", [["out", "Knock-out"], ["in", "Knock-in"]]), ...scheduleFields(),
+      select("barrierStyle", "Barrier style", [["out", "Knock-out"], ["in", "Knock-in"]]),
+      ...rebateFields(), ...scheduleFields(),
     ],
     "double-barrier": [
       { name: "lowerBarrier", label: "Lower barrier", value: 70, min: 0.0001, step: "any" },
       { name: "upperBarrier", label: "Upper barrier", value: 130, min: 0.0001, step: "any" },
-      select("barrierStyle", "Barrier style", [["out", "Knock-out"], ["in", "Knock-in"]]), ...scheduleFields(),
+      select("barrierStyle", "Barrier style", [["out", "Knock-out"], ["in", "Knock-in"]]),
+      ...rebateFields(), ...scheduleFields(),
     ],
     bermudan: [
       { name: "exerciseDates", label: "Equal exercise dates", value: 4, min: 1, max: 260, step: 1 },
