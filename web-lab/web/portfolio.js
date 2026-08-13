@@ -80,7 +80,7 @@
   let editingId = null;
   let requestId = 0;
   let busy = false;
-  const worker = new Worker("portfolio-worker.js?v=3");
+  const worker = new Worker("portfolio-worker.js?v=4");
 
   function newId() {
     if (globalThis.crypto?.randomUUID) return crypto.randomUUID();

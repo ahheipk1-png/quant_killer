@@ -48,7 +48,7 @@ function renderBasketFields() {
   const method = methodSelect.value;
   const pdeSelected = method === "pde" || method === "adi" || method.startsWith("pde-");
   if (pdeSelected && underlyingSelect.value !== "single") underlyingSelect.value = "single";
-  const visible = underlyingSelect.value !== "single" || ["rainbow", "himalayan"].includes(productSelect.value);
+  const visible = underlyingSelect.value !== "single" || ["rainbow", "himalayan", "basket"].includes(productSelect.value);
   basketFields.hidden = !visible;
   basketFields.replaceChildren(...(visible ? basketFieldDefinitions.map((def) => createField(def)) : []));
   const order = basketFields.querySelector("[data-field-name='basketOrder']");
@@ -303,6 +303,9 @@ form.addEventListener("submit", (event) => {
       return;
     }
     const config = readConfig();
+    if (config.product === "basket" && language !== "js") {
+      throw new Error("The weighted basket is JavaScript-only today -- the native wasm engines have no basket entry in the packed contract.");
+    }
     // Borrow enters only through the carry (drift = r - q - b), so fold it
     // into an effective dividend yield at the engine boundary. This page
     // uses scalar borrow/borrow2/borrow3 fields (not an assetBorrows array).

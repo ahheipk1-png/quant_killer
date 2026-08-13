@@ -44,6 +44,7 @@
 
   const ADVANCED_PRODUCT_METHODS = Object.freeze({
     asian: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "adi", "mc", "qmc"],
+    basket: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "mc", "qmc"],
     "phoenix-autocall": ["mc", "qmc"],
     "variance-swap": ["static-replication", "mc", "qmc"],
     "volatility-swap": ["mc", "qmc"],
@@ -62,6 +63,7 @@
     ...Base.PRODUCT_DESCRIPTIONS,
     compound: "Call or put on an underlying call or put; all four compound combinations are supported.",
     asian: "Discrete fixed-strike arithmetic-average call or put on an explicit, possibly uneven observation schedule.",
+    basket: "Call or put on the weighted sum of correlated assets at maturity, priced by lognormal moment matching, geometric conditioning, or Ju's expansion.",
     "phoenix-autocall": "Phoenix note with conditional coupons, optional memory, autocall observations, and protected or downside-linked redemption.",
     "variance-swap": "Discounted notional times annualized realized variance minus the variance strike.",
     "volatility-swap": "Discounted notional times realized volatility minus the volatility strike.",
@@ -76,6 +78,11 @@
       label: "Discrete arithmetic Asian",
       formula: "max(phi * (mean(S at fixing dates) - K), 0)",
       description: "The arithmetic mean uses the explicit uneven fixing schedule and can optionally include the initial spot.",
+    },
+    basket: {
+      label: "Weighted basket",
+      formula: "max(phi * (sum(w_i * S_i(T)) - K), 0)",
+      description: "The weighted sum of correlated terminal prices settles against the strike once, at maturity.",
     },
     "phoenix-autocall": {
       label: "Phoenix autocall",
@@ -224,7 +231,8 @@
   }
 
   function assetCountFor(config) {
-    if (config.product === "rainbow" || config.product === "himalayan") return config.assetCount;
+    if (config.product === "rainbow" || config.product === "himalayan"
+      || config.product === "basket") return config.assetCount;
     if (config.underlyingMode !== "single") return config.basketAssetCount;
     return 1;
   }
@@ -450,6 +458,12 @@
     if (config.product === "rainbow") {
       const terminals = simulation.paths.map((path) => path[schedule.length - 1]);
       return discount * Base.rainbowPayoff(terminals, config.strike, config.optionType, config.rainbowStyle);
+    }
+    if (config.product === "basket") {
+      const weights = normalizedWeights(config, assetCountFor(config));
+      const basket = simulation.paths.reduce((sum, path, index) =>
+        sum + weights[index] * path[schedule.length - 1], 0.0);
+      return discount * Base.vanillaPayoff(basket, config.strike, config.optionType);
     }
     if (config.product === "autocallable") {
       const redemption = Base.autocallablePayoff(primary, {
@@ -760,13 +774,9 @@
     );
   }
 
-  function shiftedLognormalPrice(config) {
-    const { first, second, third } = asianMoments(config);
+  function shiftedLognormalFromMoments(first, second, third, strike, optionType, discount) {
     const variance = Math.max(second - first * first, 0.0);
-    if (variance <= 1e-16) {
-      return Math.exp(-config.rate * config.maturity) *
-        Base.vanillaPayoff(first, config.strike, config.optionType);
-    }
+    if (variance <= 1e-16) return discount * Base.vanillaPayoff(first, strike, optionType);
     const centralThird = third - 3 * first * second + 2 * first ** 3;
     const skewness = Math.max(centralThird / variance ** 1.5, 0.0);
     let lower = 1.0 + 1e-12;
@@ -780,15 +790,22 @@
     const expVariance = 0.5 * (lower + upper);
     const lognormalMean = Math.sqrt(variance / (expVariance - 1.0));
     const shift = first - lognormalMean;
-    const adjustedStrike = config.strike - shift;
-    const discount = Math.exp(-config.rate * config.maturity);
+    const adjustedStrike = strike - shift;
     if (adjustedStrike <= 0) {
-      const call = discount * (first - config.strike);
-      return config.optionType === "call" ? Math.max(call, 0) : 0;
+      const call = discount * (first - strike);
+      return optionType === "call" ? Math.max(call, 0) : 0;
     }
     const lognormalSecond = lognormalMean * lognormalMean * expVariance;
     const call = lognormalOption(lognormalMean, lognormalSecond, adjustedStrike, "call", discount);
-    return config.optionType === "call" ? call : call - discount * (first - config.strike);
+    return optionType === "call" ? call : call - discount * (first - strike);
+  }
+
+  function shiftedLognormalPrice(config) {
+    const { first, second, third } = asianMoments(config);
+    return shiftedLognormalFromMoments(
+      first, second, third, config.strike, config.optionType,
+      Math.exp(-config.rate * config.maturity),
+    );
   }
 
   function conditionalAsianPrice(config, twoMoment) {
@@ -855,9 +872,12 @@
   function juAsianComponents(config) {
     const schedule = scheduleFor(config);
     const assets = assetCountFor(config);
-    const spots = [config.spot, config.spot2, config.spot3].slice(0, assets);
-    const volatilities = [config.volatility, config.volatility2, config.volatility3].slice(0, assets);
-    const dividends = [config.dividendYield, config.dividendYield2, config.dividendYield3].slice(0, assets);
+    // Array form (assetSpots et al.) supports arbitrary asset counts; Base
+    // normalizeConfig fills the arrays from spot2/spot3 when absent, so the
+    // fixed 2/3-asset behavior is unchanged.
+    const spots = [config.spot, ...config.assetSpots].slice(0, assets);
+    const volatilities = [config.volatility, ...config.assetVolatilities].slice(0, assets);
+    const dividends = [config.dividendYield, ...config.assetDividendYields].slice(0, assets);
     const basketWeights = normalizedWeights(config, assets);
     const fixingCount = schedule.length + (config.includeInitialFixing ? 1 : 0);
     let effectiveInitial = config.spot;
@@ -1026,6 +1046,138 @@
     const expectedAverage = deterministic + firstMoment;
     const put = call - discount * (expectedAverage - config.strike);
     return config.optionType === "call" ? call : Math.max(put, 0.0);
+  }
+
+  function basketLegs(config) {
+    const assets = assetCountFor(config);
+    return {
+      assets,
+      spots: [config.spot, ...config.assetSpots].slice(0, assets),
+      volatilities: [config.volatility, ...config.assetVolatilities].slice(0, assets),
+      dividends: [config.dividendYield, ...config.assetDividendYields].slice(0, assets),
+      weights: normalizedWeights(config, assets),
+    };
+  }
+
+  // Exact moments E[B^k], k = 1..3, of the weighted lognormal sum
+  // B = sum_i w_i S_i(T) under GBM with equicorrelation rho:
+  // E[S_i S_j] = F_i F_j exp(cov_ij), cov_ij = sigma_i sigma_j rho_ij T.
+  // Mirrors asianMoments with the spatial covariance replacing the
+  // single-asset min(t_i, t_j) autocovariance (an Asian average IS a basket
+  // of one asset sampled across time).
+  function basketMoments(config) {
+    const { assets, spots, volatilities, dividends, weights } = basketLegs(config);
+    const maturity = config.maturity;
+    const legs = spots.map((spot, index) =>
+      weights[index] * spot * Math.exp((config.rate - dividends[index]) * maturity));
+    const covariance = (first, second) => volatilities[first] * volatilities[second] *
+      (first === second ? 1.0 : config.correlation) * maturity;
+    let first = 0.0; let second = 0.0; let third = 0.0;
+    for (let i = 0; i < assets; i += 1) {
+      first += legs[i];
+      for (let j = 0; j < assets; j += 1) {
+        second += legs[i] * legs[j] * Math.exp(covariance(i, j));
+        for (let k = 0; k < assets; k += 1) {
+          third += legs[i] * legs[j] * legs[k] *
+            Math.exp(covariance(i, j) + covariance(i, k) + covariance(j, k));
+        }
+      }
+    }
+    return { first, second, third };
+  }
+
+  function basketLevyPrice(config) {
+    const moments = basketMoments(config);
+    return lognormalOption(
+      moments.first, moments.second, config.strike, config.optionType,
+      Math.exp(-config.rate * config.maturity),
+    );
+  }
+
+  function basketShiftedLognormalPrice(config) {
+    const moments = basketMoments(config);
+    return shiftedLognormalFromMoments(
+      moments.first, moments.second, moments.third, config.strike, config.optionType,
+      Math.exp(-config.rate * config.maturity),
+    );
+  }
+
+  // Curran geometric conditioning, spatial form: condition the basket on the
+  // weighted sum of terminal log-prices Y = sum_i w_i ln S_i(T) (the log of
+  // the weighted geometric mean), integrate the conditional payoff over the
+  // Gaussian conditioning variable. Same Simpson structure as the Asian
+  // conditionalAsianPrice with the spatial covariance and per-asset weights.
+  function conditionalBasketPrice(config, twoMoment) {
+    const { assets, spots, volatilities, dividends, weights } = basketLegs(config);
+    const maturity = config.maturity;
+    const means = spots.map((spot, index) => Math.log(spot) +
+      (config.rate - dividends[index] - 0.5 * volatilities[index] ** 2) * maturity);
+    const covariance = (first, second) => volatilities[first] * volatilities[second] *
+      (first === second ? 1.0 : config.correlation) * maturity;
+    let meanY = 0.0;
+    let varianceY = 0.0;
+    const covarianceY = new Float64Array(assets);
+    for (let i = 0; i < assets; i += 1) {
+      meanY += weights[i] * means[i];
+      for (let j = 0; j < assets; j += 1) {
+        varianceY += weights[i] * weights[j] * covariance(i, j);
+        covarianceY[i] += weights[j] * covariance(i, j);
+      }
+    }
+    if (varianceY <= 1e-16) return basketLevyPrice(config);
+    const rootVarianceY = Math.sqrt(varianceY);
+    const lower = -8.0;
+    const upper = 8.0;
+    const intervals = 320;
+    const dz = (upper - lower) / intervals;
+    const integrand = (z) => {
+      const y = meanY + rootVarianceY * z;
+      const conditionalMeans = new Float64Array(assets);
+      let firstMoment = 0.0;
+      for (let index = 0; index < assets; index += 1) {
+        const logMean = means[index] + covarianceY[index] / varianceY * (y - meanY);
+        const logVariance = volatilities[index] ** 2 * maturity -
+          covarianceY[index] ** 2 / varianceY;
+        conditionalMeans[index] = Math.exp(logMean + 0.5 * Math.max(logVariance, 0.0));
+        firstMoment += weights[index] * conditionalMeans[index];
+      }
+      let conditionalPayoff;
+      if (!twoMoment) {
+        conditionalPayoff = Base.vanillaPayoff(firstMoment, config.strike, config.optionType);
+      } else {
+        let secondMoment = 0.0;
+        for (let first = 0; first < assets; first += 1) {
+          for (let second = 0; second < assets; second += 1) {
+            const conditionalCovariance = covariance(first, second) -
+              covarianceY[first] * covarianceY[second] / varianceY;
+            secondMoment += weights[first] * weights[second] * conditionalMeans[first] *
+              conditionalMeans[second] * Math.exp(conditionalCovariance);
+          }
+        }
+        conditionalPayoff = lognormalOption(
+          firstMoment, secondMoment, config.strike, config.optionType, 1.0,
+        );
+      }
+      return conditionalPayoff * Math.exp(-0.5 * z * z) / Math.sqrt(2.0 * Math.PI);
+    };
+    let total = integrand(lower) + integrand(upper);
+    for (let index = 1; index < intervals; index += 1) {
+      total += (index % 2 ? 4.0 : 2.0) * integrand(lower + index * dz);
+    }
+    return Math.exp(-config.rate * maturity) * total * dz / 3.0;
+  }
+
+  // A weighted-sum basket is Ju's lognormal-sum expansion with exactly one
+  // fixing at maturity: component (asset i, time T) has mean w_i F_i and the
+  // cross-asset covariance sigma_i sigma_j rho T -- precisely the spatial
+  // basket law. Reuses the full order-six Asian machinery unchanged.
+  function juBasketPrice(config) {
+    return juAsianPrice({
+      ...config,
+      observationTimes: [config.maturity],
+      includeInitialFixing: false,
+      underlyingMode: "weighted-price",
+    });
   }
 
   function thomasSolve(lower, diagonal, upper, right) {
@@ -1286,6 +1438,35 @@
         adi: asianAdiPrice,
       };
       result = { price: prices[method](config), standardError: null, standardDeviation: null, samples: 0 };
+    } else if (config.product === "basket") {
+      if (config.volatilityModel !== "constant") {
+        throw new Error("Basket moment-matching approximations are Black-Scholes methods; select MC/QMC for term, local, Heston, or SLV.");
+      }
+      if (normalizedWeights(config, assetCountFor(config)).some((weight) => !(weight > 0))) {
+        throw new Error("Basket moment matching requires strictly positive weights; use MC or QMC for long-short baskets.");
+      }
+      const prices = {
+        levy: basketLevyPrice,
+        "shifted-lognormal": basketShiftedLognormalPrice,
+        curran: (value) => conditionalBasketPrice(value, false),
+        "curran-two-moment": (value) => conditionalBasketPrice(value, true),
+        "ju-taylor": juBasketPrice,
+      };
+      const value = prices[method](config);
+      // Deterministic Sobol check with zero digital shift, matching the
+      // barrier benchmark convention -- reproducible without seed plumbing.
+      const check = monteCarloPrice({ ...config, paths: 32768, randomizedQmc: false }, "qmc");
+      result = {
+        price: value, standardError: null, standardDeviation: null, samples: 0,
+        benchmark: {
+          price: check.price,
+          standardError: check.standardDeviation != null
+            ? check.standardDeviation / Math.sqrt(32768) : null,
+          difference: value - check.price,
+          kind: "basket-qmc",
+          samples: 32768,
+        },
+      };
     } else if (config.product === "compound" && method === "closed-form") {
       if (config.volatilityModel !== "constant") throw new Error("Geske compound formulas require constant volatility.");
       result = { price: generalizedCompoundClosedForm(config), standardError: null, standardDeviation: null, samples: 0 };
@@ -1500,6 +1681,11 @@
     shiftedLognormalPrice,
     conditionalAsianPrice,
     juAsianPrice,
+    basketMoments,
+    basketLevyPrice,
+    basketShiftedLognormalPrice,
+    conditionalBasketPrice,
+    juBasketPrice,
     asianAdiPrice,
     generalizedCompoundClosedForm,
     staticVarianceSwapPrice,

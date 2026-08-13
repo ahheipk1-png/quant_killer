@@ -1526,7 +1526,8 @@
       autocallBarrier: Number(input.autocallBarrier ?? 1.0),
       protectionBarrier: Number(input.protectionBarrier ?? 0.7),
       observations: Math.trunc(Number(input.observations ?? 3)),
-      assetCount: Math.trunc(Number(input.assetCount ?? (input.product === "rainbow" ? 2 : 3))),
+      assetCount: Math.trunc(Number(input.assetCount ??
+        (input.product === "rainbow" || input.product === "basket" ? 2 : 3))),
       // Assets beyond the primary, for rainbow/himalayan -- arbitrary length,
       // not capped at the old spot2/spot3-only 3-asset basket. Falls back to
       // spot2/spot3 (as a 2-entry array) when the caller hasn't supplied the
@@ -1548,7 +1549,8 @@
       throw new Error("Spot, strike, maturity, and volatility must be positive.");
     }
     if (config.paths < 100 || config.paths > 500000) throw new Error("Paths must be between 100 and 500,000.");
-    if (config.product === "rainbow" || config.product === "himalayan") {
+    if (config.product === "rainbow" || config.product === "himalayan"
+      || config.product === "basket") {
       // Floor of 1, not 2: a one-asset basket is a legitimate degenerate
       // case (himalayan reduces to a single locked return, rainbow to the
       // vanilla) and the payoff-reduction test suite exercises it. The UI

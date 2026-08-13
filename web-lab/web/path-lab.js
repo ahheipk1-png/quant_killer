@@ -15,7 +15,7 @@ const underlyingMode = document.querySelector("#underlyingMode");
 const assetCount = document.querySelector("#basketAssetCount");
 const seriesSelect = document.querySelector("#series");
 const samplingSelect = document.querySelector("#sampling");
-const worker = new Worker("path-distribution-worker.js?v=3");
+const worker = new Worker("path-distribution-worker.js?v=4");
 
 const samplingNotes = {
   mc: "Independent PCG32 pseudorandom draws. Change the seed for a fresh sample.",

@@ -14,7 +14,8 @@
   const productLabels = {
     american: "American vanilla · PDE",
     digital: "Digital / binary", barrier: "Single barrier", "double-barrier": "Double barrier",
-    bermudan: "Bermudan", rainbow: "Rainbow / order statistic", autocallable: "Autocallable",
+    bermudan: "Bermudan", rainbow: "Rainbow / order statistic", basket: "Weighted basket",
+    autocallable: "Autocallable",
     "phoenix-autocall": "Phoenix autocall", "yield-seeker": "Yield seeker", himalayan: "Himalayan",
     asian: "Discrete arithmetic Asian", lookback: "Lookback", ladder: "Ladder",
     compound: "Compound option", "variance-swap": "Variance swap", "volatility-swap": "Volatility swap",
@@ -29,6 +30,7 @@
     "double-barrier": "Double knock-in or knock-out option with discrete path monitoring.",
     bermudan: "Early exercise is permitted only on the supplied observation schedule.",
     rainbow: "Best- or worst-performing asset payoff.",
+    basket: "Call or put on the weighted sum of correlated assets at maturity; four moment-matching approximations plus MC.",
     autocallable: "Coupon note callable on scheduled observations with protected or downside-linked redemption.",
     "phoenix-autocall": "Conditional coupons, optional memory, scheduled autocall, and barrier-linked redemption.",
     "yield-seeker": "Conditional high-coupon barrier note without autocall; maturity principal is downside linked below protection.",
@@ -45,7 +47,7 @@
   };
 
   const languageDefinitions = {
-    js: { label: "JavaScript", detail: "JavaScript reference", url: "exotic-worker.js?v=7", type: "classic", timeout: 10000,
+    js: { label: "JavaScript", detail: "JavaScript reference", url: "exotic-worker.js?v=8", type: "classic", timeout: 10000,
       note: "Reference engine: product formulas, tree/PDE methods, PCG Monte Carlo, and Sobol QMC." },
     cpp: { label: "C++", detail: "C++ / WebAssembly", url: "advanced-cpp-worker.js?v=2", type: "classic", timeout: 10000,
       note: "Native C++ path engine: every listed payoff and volatility model through seeded Monte Carlo." },
@@ -98,9 +100,9 @@
     pde: "One-factor Black–Scholes finite-difference PDE.",
     mc: "Path simulation with a reported payoff standard deviation and estimator standard error.",
     qmc: "Sobol low-discrepancy paths; optionally randomized with a digital shift.",
-    levy: "Matches the first two moments of the uneven discrete arithmetic average.",
-    "shifted-lognormal": "Uses the first three moments to fit a shifted lognormal average.",
-    curran: "Conditions the arithmetic average on its geometric average.",
+    levy: "Matches the first two moments of the arithmetic average or weighted basket sum with a lognormal.",
+    "shifted-lognormal": "Fits a shifted lognormal to the first three moments of the average or weighted basket sum.",
+    curran: "Conditions the arithmetic average or weighted basket on its geometric counterpart.",
     "curran-two-moment": "Adds a conditional two-moment fit to Curran conditioning.",
     "ju-taylor": "Published Ju lognormal characteristic-function correction through volatility order 6; supports uneven Asian fixings and positive-weight price/return baskets up to 320 stochastic components.",
     adi: "Two-state spot/running-sum PDE with fixing-date jump operators and Crank–Nicolson spot steps.",
@@ -114,6 +116,7 @@
     "double-barrier": ["semi-closed", "closed-form-daily", "closed-form-weekly", "closed-form-terminal", "pde", "mc", "qmc"],
     bermudan: ["tree", "pde", "mc", "qmc"],
     rainbow: ["closed-form", "mc", "qmc"], autocallable: ["mc", "qmc"], himalayan: ["mc", "qmc"],
+    basket: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "mc", "qmc"],
     lookback: ["closed-form", "mc", "qmc"], ladder: ["mc", "qmc"],
     compound: ["closed-form", "mc", "qmc"],
     asian: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "adi", "mc", "qmc"],
@@ -157,6 +160,9 @@
     ],
     rainbow: [
       select("rainbowStyle", "Order statistic", [["best", "Best performer"], ["worst", "Worst performer"]]),
+      select("assetCount", "Asset count", [["2", "Two"], ["3", "Three"]], "2"),
+    ],
+    basket: [
       select("assetCount", "Asset count", [["2", "Two"], ["3", "Three"]], "2"),
     ],
     autocallable: [

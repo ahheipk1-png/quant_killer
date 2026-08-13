@@ -856,7 +856,7 @@ function createInstrumentPanel(prefillEntry) {
     // Rows must exist before the data-payoff-only pass below so it can set
     // their disabled state correctly (a fresh row created after that pass
     // would stay enabled-but-hidden, and thus wrongly included in FormData).
-    if (product === "rainbow" || product === "himalayan") {
+    if (product === "rainbow" || product === "himalayan" || product === "basket") {
       renderBasketAssetRows(assetCountInput.value);
     }
 
@@ -933,7 +933,12 @@ function createInstrumentPanel(prefillEntry) {
       );
     }
     data.basketWeights = String(data.basketWeights || "0.5,0.3,0.2").split(",").map(Number).filter(Number.isFinite);
-    if (data.product === "rainbow" || data.product === "himalayan") {
+    if (data.product === "basket" && engineSelect.value !== "js") {
+      throw new Error(
+        "The weighted basket is JavaScript-only today -- the native wasm engines have no basket entry in the packed contract.",
+      );
+    }
+    if (data.product === "rainbow" || data.product === "himalayan" || data.product === "basket") {
       const assetCount = Math.max(2, Math.min(20, Math.trunc(Number(data.assetCount)) || 2));
       data.assetCount = assetCount;
       const extraCount = assetCount - 1;
@@ -1510,7 +1515,7 @@ function createInstrumentPanel(prefillEntry) {
     // matching form.elements name (they're arrays backing repeated-name
     // dynamic rows), so the generic loop above silently skips them --
     // rebuild the row count first, then populate each row explicitly.
-    if (prefillEntry.inputs.product === "rainbow" || prefillEntry.inputs.product === "himalayan") {
+    if (["rainbow", "himalayan", "basket"].includes(prefillEntry.inputs.product)) {
       renderBasketAssetRows(prefillEntry.inputs.assetCount);
       const spotInputs = [...basketAssetsList.querySelectorAll('[name="assetSpot"]')];
       const volInputs = [...basketAssetsList.querySelectorAll('[name="assetVolatility"]')];
@@ -1650,7 +1655,7 @@ function copyModuleValues(sourcePanelId, module, targetRoot) {
     targetControl.updatePayoffVisibility();
     targetControl.updateExoticScheduleFields();
     const sourceProduct = sourceDialog.querySelector('[name="payoffType"]')?.value;
-    if (sourceProduct === "rainbow" || sourceProduct === "himalayan") {
+    if (sourceProduct === "rainbow" || sourceProduct === "himalayan" || sourceProduct === "basket") {
       const sourceAssetCount = sourceDialog.querySelector('[name="assetCount"]').value;
       targetControl.renderBasketAssetRows(sourceAssetCount);
       ["assetSpot", "assetVolatility", "assetDividendYield", "assetBorrow"].forEach((name) => {
