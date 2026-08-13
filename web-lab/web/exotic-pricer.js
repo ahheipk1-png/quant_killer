@@ -317,6 +317,39 @@
     return config.cashPayoff * Math.exp(-config.rate * config.maturity) * probability;
   }
 
+  // At zero volatility the underlying follows the single deterministic curve
+  // S*exp((r-q)t), which is monotone, so its extreme over [0, T] is at one of
+  // the endpoints -- the barrier is either crossed on that one path or never.
+  // Both the option leg and the rebate leg need this, so it lives in one place.
+  function deterministicallyTouches(config, barrier, direction) {
+    const forward = config.spot *
+      Math.exp((config.rate - config.dividendYield) * config.maturity);
+    return direction === "down"
+      ? Math.min(config.spot, forward) <= barrier
+      : Math.max(config.spot, forward) >= barrier;
+  }
+
+  // ln(Number.MAX_VALUE) is about 709; stay clear of it.
+  const OVERFLOW_EXPONENT = 690.0;
+
+  // A barrier formula degenerates when the diffusion is so small that its
+  // image/tilt terms overflow the double range: mu = (carry - sigma^2/2)/sigma^2
+  // grows like 1/sigma^2, so (H/S)^(2*mu) reaches Infinity and then meets a
+  // zero normalCdf as Infinity * 0 = NaN. This bites at far higher volatility
+  // than it looks -- with a 25%-away barrier and 4% carry it triggers around
+  // sigma = 0.5%, which is a realistic level for rates or a pegged FX barrier,
+  // not just a synthetic zero. Once there, the diffusion is far too small to
+  // carry spot across the barrier on its own, so the deterministic drift path
+  // is both the numerically safe and the economically correct answer.
+  // logSpan is the largest |log(level / spot)| the formula's exponents use.
+  function isDegenerateDiffusion(config, logSpan) {
+    if (!(config.volatility * Math.sqrt(config.maturity) > 1e-12)) return true;
+    const variance = config.volatility * config.volatility;
+    const tilt = (config.rate - config.dividendYield - 0.5 * variance) / variance;
+    return Math.abs(2.0 * tilt * logSpan) +
+      0.5 * tilt * tilt * variance * config.maturity > OVERFLOW_EXPONENT;
+  }
+
   function barrierOutClosedForm(config) {
     const { spot: s, strike: k, barrier: h, rate: r, dividendYield: q,
       volatility: sigma, maturity: t, optionType, barrierDirection } = config;
@@ -326,6 +359,14 @@
     const phi = isCall ? 1.0 : -1.0;
     const eta = isDown ? 1.0 : -1.0;
     const carry = r - q;
+    // Zero vol (or zero time) needs the deterministic branch: otherwise
+    // mu = (carry - sigma^2/2)/sigma^2 diverges, (H/S)^(2mu) overflows to
+    // Infinity, and Infinity * N(-huge) = Infinity * 0 evaluates to NaN.
+    // The project convention (CLAUDE.md) is discounted forward intrinsic.
+    if (isDegenerateDiffusion(config, Math.abs(Math.log(h / s)))) {
+      if (deterministicallyTouches(config, h, barrierDirection)) return 0.0;
+      return Math.exp(-r * t) * Math.max(phi * (s * Math.exp(carry * t) - k), 0.0);
+    }
     const variance = sigma * sigma;
     const rootVariance = sigma * Math.sqrt(t);
     const mu = (carry - 0.5 * variance) / variance;
@@ -397,6 +438,19 @@
       if (isIn) return 0.0;
       return payAtHit ? rebate : rebate * strikeDiscount;
     }
+    // Same degenerate-diffusion guard as barrierOutClosedForm: the (H/S)^(mu +/- lambda)
+    // factors overflow in exactly the same regime, and the crossing is deterministic there.
+    if (isDegenerateDiffusion(config, Math.abs(Math.log(h / s)))) {
+      const touches = deterministicallyTouches(config, h, barrierDirection);
+      if (isIn ? touches : !touches) return 0.0;
+      if (!payAtHit) return rebate * strikeDiscount;
+      // Solve S*exp(carry*u) = H for the exact crossing time.
+      const carry = r - q;
+      const hitTime = Math.abs(carry) < 1e-14
+        ? 0.0
+        : Math.min(Math.max(Math.log(h / s) / carry, 0.0), t);
+      return rebate * Math.exp(-r * hitTime);
+    }
     const eta = isDown ? 1.0 : -1.0;
     const variance = sigma * sigma;
     const rootVariance = sigma * Math.sqrt(t);
@@ -455,8 +509,32 @@
     return { coefficients, decayRates };
   }
 
+  // Zero-vol counterpart of deterministicallyTouches for the two-sided case:
+  // the monotone path S*exp(carry*t) can only leave the strip through one
+  // side, so the crossing (if any) and its exact time are both explicit.
+  function deterministicDoubleTouch(config) {
+    const carry = config.rate - config.dividendYield;
+    const forward = config.spot * Math.exp(carry * config.maturity);
+    const belowLower = Math.min(config.spot, forward) <= config.lowerBarrier;
+    const aboveUpper = Math.max(config.spot, forward) >= config.upperBarrier;
+    if (!belowLower && !aboveUpper) return { touches: false, hitTime: config.maturity };
+    if (Math.abs(carry) < 1e-14) return { touches: true, hitTime: 0.0 };
+    const level = belowLower ? config.lowerBarrier : config.upperBarrier;
+    const hitTime = Math.min(Math.max(Math.log(level / config.spot) / carry, 0.0), config.maturity);
+    return { touches: true, hitTime };
+  }
+
+  // The strip's own log-width bounds every exponent the double-barrier series
+  // evaluates (tilt * (y - logSpot) with y inside the strip, plus exp(tilt*width)).
+  function doubleBarrierLogSpan(config) {
+    return Math.log(config.upperBarrier) - Math.log(config.lowerBarrier);
+  }
+
   function doubleBarrierSurvivalProbability(config) {
     if (config.spot <= config.lowerBarrier || config.spot >= config.upperBarrier) return 0.0;
+    if (isDegenerateDiffusion(config, doubleBarrierLogSpan(config))) {
+      return deterministicDoubleTouch(config).touches ? 0.0 : 1.0;
+    }
     const { coefficients, decayRates } = doubleBarrierSurvivalModes(config);
     let total = 0.0;
     for (let index = 0; index < coefficients.length; index += 1) {
@@ -488,6 +566,13 @@
       if (isIn) return 0.0;
       return config.rebateTiming === "hit" ? rebate : rebate * discount;
     }
+    if (isDegenerateDiffusion(config, doubleBarrierLogSpan(config))) {
+      const { touches, hitTime } = deterministicDoubleTouch(config);
+      if (isIn ? touches : !touches) return 0.0;
+      return config.rebateTiming === "hit" && !isIn
+        ? rebate * Math.exp(-config.rate * hitTime)
+        : rebate * discount;
+    }
     // Knock-in rebates only ever pay at expiry (see barrierRebateValue).
     if (config.rebateTiming === "hit" && !isIn) {
       const { coefficients, decayRates } = doubleBarrierSurvivalModes(config);
@@ -510,6 +595,17 @@
       dividendYield, volatility, maturity, optionType } = config;
     if (spot <= lower || spot >= upper) {
       return (config.barrierStyle === "in" ? vanilla : 0.0) + doubleBarrierRebateValue(config);
+    }
+    // Degenerate diffusion: tilt = drift/sigma^2 diverges and the tilted
+    // density's exp() factors overflow to Infinity * 0 = NaN. The zero-vol
+    // path is deterministic, so the knock-out either survives whole or dies.
+    if (isDegenerateDiffusion(config, doubleBarrierLogSpan(config))) {
+      const survives = !deterministicDoubleTouch(config).touches;
+      const alive = config.barrierStyle === "in" ? !survives : survives;
+      const intrinsic = Math.exp(-rate * maturity) * Math.max(
+        (optionType === "call" ? 1.0 : -1.0) *
+        (spot * Math.exp((rate - dividendYield) * maturity) - strike), 0.0);
+      return (alive ? intrinsic : 0.0) + doubleBarrierRebateValue(config);
     }
     const logLower = Math.log(lower);
     const logUpper = Math.log(upper);
