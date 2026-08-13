@@ -243,6 +243,81 @@ accuracy of both variants is governed entirely by how well the conditional law
 of `A` is captured — a point mass (one-moment) or a fitted lognormal
 (two-moment).
 
+## Which variant to use — measured
+
+The one-moment/two-moment choice should follow **how correlated the things being
+averaged are**, not the product name. All figures below are percentage error
+against a randomized-QMC reference (8 shifts x 16384 Sobol points).
+
+### Asian (one asset through time — internally very correlated)
+
+`σ√T` from 0.2 to 1.5, one-year monthly fixings:
+
+| Variant | Error range | Cost @252 daily fixings |
+|---|---|---|
+| one-moment | −0.02 % to −0.56 % | 0.13 ms |
+| two-moment | +0.03 % to +0.05 % | 19.3 ms |
+
+One-moment is the right default: two-moment buys no accuracy for ~150x the cost.
+
+### Basket (separate assets — correlation is a free parameter)
+
+3 assets, call/put x K ∈ {80,100,120} x ρ ∈ {0, 0.35, 0.9}, worst case per method:
+
+| Product | one-moment | two-moment | Ju |
+|---|---|---|---|
+| vanilla | **−7.8 %** | +1.6 % | −0.16 % |
+| digital | **−5.5 %** | +0.7 % | — |
+
+One-moment is **not safe for low-correlation baskets**. Its error is worst
+exactly where the residual conditional variance is largest and the payoff is
+most sensitive to it: low ρ and out-of-the-money. Representative vanilla cases:
+
+| Case | one-moment | two-moment | Ju |
+|---|---|---|---|
+| put K=80, ρ=0 | −7.78 % | +1.58 % | −0.16 % |
+| call K=120, ρ=0 | −2.94 % | −0.20 % | +0.05 % |
+| put K=100, ρ=0 | −1.59 % | +0.07 % | +0.01 % |
+| put K=80, ρ=0.35 | −1.74 % | +0.10 % | −0.05 % |
+| any, ρ=0.9 | ≤0.16 % | ≤0.7 % | — |
+
+At ρ = 0.9 one-moment is excellent (≤0.16 %) — consistent with the mechanism in
+step 6: high correlation means the geometric mean explains nearly everything, so
+there is almost no residual variance to discard.
+
+### Cost, 3-asset basket (bare pricer, no MC benchmark attached)
+
+| Levy | shifted | Curran 1m | Curran 2m | Ju |
+|---|---|---|---|---|
+| 0.015 ms | 0.021 ms | 0.086 ms | 0.212 ms | **0.024 ms** |
+
+**Ju is the correct default for baskets** — most accurate of everything tested
+*and* cheaper than either Curran variant. This is the exact opposite of the
+Asian case, and the reason is structural rather than numerical: Ju's cost is
+cubic in its component count, which is `assets × fixings`. A basket has one
+fixing, so a 3-asset basket is 3 components (27 operations). A one-year daily
+Asian is 252, and a 3-asset daily Asian is 756 — past the 320-component ceiling
+Ju refuses to price beyond.
+
+Summary:
+
+- **Asian → Curran one-moment.** Ju is 25 ms and caps out on long schedules.
+- **Basket → Ju.** Curran one-moment is dangerous below ρ ≈ 0.9; if Ju is
+  unavailable, use two-moment, never one-moment.
+
+## Not available for baskets
+
+Curran (either variant) is deliberately rejected for two combinations:
+
+- **Basket barrier** — Curran approximates only the terminal marginal and
+  carries no running-maximum structure, so it cannot price a path-dependent
+  barrier. Basket barriers use the effective-GBM route instead.
+- **Basket Asian** — `asianMoments` is single-asset (it integrates the
+  one-asset time-covariance `σ²min(s,t)`), so on a basket underlying Curran,
+  Levy, shifted and ADI would silently return the asset-1 price, about 59 % too
+  high for an uncorrelated three-asset average. They now throw and point at
+  Ju/MC/QMC.
+
 ## References
 
 The conditioning approach is due to Michael Curran:
