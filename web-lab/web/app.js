@@ -570,6 +570,7 @@ function createInstrumentPanel(prefillEntry) {
   const scheduleModeSelect = root.querySelector('.module-dialog[data-module="contractual"] [name="scheduleMode"]');
   const assetCountInput = root.querySelector('[name="assetCount"]');
   const basketPayoffSelect = root.querySelector('[name="basketPayoff"]');
+  const capComponentsInput = root.querySelector('[name="capComponents"]');
   const basketBarrierKindSelect = root.querySelector('[name="basketBarrierKind"]');
   const basketAssetsList = root.querySelector('[data-basket-assets]');
   const basketAddAssetButton = root.querySelector('.basket-add-asset');
@@ -678,6 +679,9 @@ function createInstrumentPanel(prefillEntry) {
 
   function availableExoticMethods(product) {
     if (engineSelect.value !== "js") return ["mc"];
+    // Capping clips each component's performance, which destroys the
+    // lognormality every analytic method here relies on (see AdvancedPricer).
+    if (capComponentsInput?.checked) return ["mc", "qmc"];
     const methodsForProduct = product === "basket"
       ? ExoticFields.basketMethodsFor(basketPayoffSelect.value)
       : ExoticFields.referenceMethods[product] || ["mc"];
@@ -873,6 +877,14 @@ function createInstrumentPanel(prefillEntry) {
       element.querySelectorAll("input, select").forEach((control) => { control.disabled = !visible; });
     });
 
+    // The cap/floor levels are only meaningful once capping is switched on.
+    const capOn = Boolean(capComponentsInput?.checked);
+    root.querySelectorAll("[data-cap-only]").forEach((element) => {
+      const visible = product === "basket" && capOn;
+      element.hidden = !visible;
+      element.querySelectorAll("input, select").forEach((control) => { control.disabled = !visible; });
+    });
+
     // Second, narrower pass: within the basket product, cashPayoff and the
     // barrier fields are further gated by the basket-payoff sub-mode select
     // (vanilla/digital/barrier) -- data-payoff-only alone can't express this
@@ -940,6 +952,7 @@ function createInstrumentPanel(prefillEntry) {
       data[input.name] = Number(input.value) / 100;
     });
     data.randomizedQmc = Boolean(form.elements.randomizedQmc?.checked);
+    data.capComponents = Boolean(form.elements.capComponents?.checked);
     data.includeInitialFixing = Boolean(form.elements.includeInitialFixing?.checked);
     data.memoryCoupon = form.elements.memoryCoupon ? form.elements.memoryCoupon.checked : true;
     data.observationDates = [...observationDatesList.querySelectorAll('[name="observationDate"]')]
@@ -1361,8 +1374,11 @@ function createInstrumentPanel(prefillEntry) {
   });
   exerciseSelect.addEventListener("change", updateMethodOptions);
   payoffTypeSelect.addEventListener("change", updatePayoffVisibility);
-  [basketPayoffSelect, basketBarrierKindSelect].forEach((select) => {
-    select.addEventListener("change", () => {
+  // capComponents is a checkbox rather than a select, but drives the same two
+  // updates: it reveals the cap/floor levels and narrows the method list
+  // (capping is simulation-only).
+  [basketPayoffSelect, basketBarrierKindSelect, capComponentsInput].forEach((control) => {
+    control.addEventListener("change", () => {
       updatePayoffVisibility();
       updateExoticMethodOptions();
     });

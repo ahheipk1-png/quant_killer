@@ -183,6 +183,12 @@
       pdeAverageGrid: Math.trunc(Number(input.pdeAverageGrid ?? 72)),
       pdeTimeSteps: Math.trunc(Number(input.pdeTimeSteps ?? 220)),
       underlyingMode: input.underlyingMode || "single",
+      // Individually capped/floored components: each asset's performance
+      // S_i(t)/S_i(0) is clipped to [componentFloor, componentCap] at every
+      // observation date, BEFORE the components are combined into the basket.
+      capComponents: Boolean(input.capComponents),
+      componentCap: Number(input.componentCap ?? 1.3),
+      componentFloor: Number(input.componentFloor ?? 0.7),
       basketPayoff: input.basketPayoff || "vanilla",
       basketBarrierKind: input.basketBarrierKind || "single",
       basketAssetCount: Math.trunc(Number(input.basketAssetCount ?? 3)),
@@ -203,6 +209,14 @@
     if (config.observationTimes.some((time, index, times) =>
       time <= 0 || time > config.maturity + 1e-12 || (index > 0 && time <= times[index - 1]))) {
       throw new Error("Observation times must be strictly increasing and lie inside maturity.");
+    }
+    if (config.capComponents) {
+      if (!(config.componentFloor >= 0)) {
+        throw new Error("Component floor must be zero or greater (it clips a performance ratio, not a price).");
+      }
+      if (!(config.componentCap > config.componentFloor)) {
+        throw new Error("Component cap must be strictly above the component floor.");
+      }
     }
     return config;
   }
@@ -257,18 +271,30 @@
     const initial = [config.spot, config.spot2, config.spot3].slice(0, count);
     const values = new Float64Array(paths[0].length);
     const initialWeightedPrice = initial.reduce((sum, value, index) => sum + weights[index] * value, 0.0);
+    // Individually capped/floored components. The clip is on each asset's
+    // PERFORMANCE ratio S_i(t)/S_i(0), applied at every observation date and
+    // before the components are combined -- so a component that has run past
+    // the cap stops contributing further upside, while the basket average is
+    // still taken over the clipped series. Every mode below therefore routes
+    // its per-component ratio through this one function; price-denominated
+    // modes rebuild a price from the clipped ratio so the two stay consistent.
+    const clip = config.capComponents
+      ? (ratio) => Math.min(Math.max(ratio, config.componentFloor), config.componentCap)
+      : (ratio) => ratio;
     for (let step = 0; step < values.length; step += 1) {
       if (config.underlyingMode === "weighted-price") {
-        values[step] = paths.reduce((sum, path, index) => sum + weights[index] * path[step], 0.0);
+        values[step] = paths.reduce((sum, path, index) =>
+          sum + weights[index] * initial[index] * clip(path[step] / initial[index]), 0.0);
       } else if (config.underlyingMode === "weighted-returns") {
         const performance = paths.reduce((sum, path, index) =>
-          sum + weights[index] * path[step] / initial[index], 0.0);
+          sum + weights[index] * clip(path[step] / initial[index]), 0.0);
         values[step] = config.spot * performance;
       } else if (config.underlyingMode === "return-of-weighted-sum") {
-        const weightedPrice = paths.reduce((sum, path, index) => sum + weights[index] * path[step], 0.0);
+        const weightedPrice = paths.reduce((sum, path, index) =>
+          sum + weights[index] * initial[index] * clip(path[step] / initial[index]), 0.0);
         values[step] = config.spot * weightedPrice / initialWeightedPrice;
       } else if (config.underlyingMode === "order-performance") {
-        const performances = paths.map((path, index) => path[step] / initial[index])
+        const performances = paths.map((path, index) => clip(path[step] / initial[index]))
           .sort((first, second) => second - first);
         const rank = Math.min(Math.max(config.basketOrder, 1), performances.length) - 1;
         values[step] = config.spot * performances[rank];
@@ -467,8 +493,17 @@
     }
     if (config.product === "basket") {
       const weights = normalizedWeights(config, assetCountFor(config));
+      // This product aggregates its own legs rather than going through
+      // effectiveUnderlying, so the component cap has to be applied here too
+      // -- otherwise turning it on would silently do nothing. Same rule as
+      // there: clip each asset's performance ratio, then rebuild a price from
+      // it so the basket stays in price units.
+      const initialSpots = [config.spot, ...config.assetSpots].slice(0, assetCountFor(config));
+      const clip = config.capComponents
+        ? (ratio) => Math.min(Math.max(ratio, config.componentFloor), config.componentCap)
+        : (ratio) => ratio;
       const basketAt = (step) => simulation.paths.reduce((sum, path, index) =>
-        sum + weights[index] * path[step], 0.0);
+        sum + weights[index] * initialSpots[index] * clip(path[step] / initialSpots[index]), 0.0);
       const terminal = basketAt(schedule.length - 1);
       if (config.basketPayoff === "digital") {
         return discount * Base.digitalPayoff(terminal, config.strike, config.optionType, config.cashPayoff);
@@ -1767,6 +1802,26 @@
     const config = normalizeConfig(input);
     const supported = PRODUCT_METHODS[config.product];
     if (!supported?.includes(method)) throw new Error(`${method} is not available for ${config.product}.`);
+    // Clipping a component's performance destroys its lognormality: the
+    // clipped variable carries point masses at the cap and the floor, so it
+    // has no density there at all. Every analytic method in this file assumes
+    // a (sum of) lognormal(s) -- Levy and shifted match moments TO a lognormal,
+    // Curran conditions on a geometric mean that no longer summarises the
+    // clipped law, and Ju expands around a lognormal. None of them survive it,
+    // and each would fail silently rather than loudly. Simulation is exact
+    // here, since the clip is just applied along the path.
+    if (config.capComponents && method !== "mc" && method !== "qmc") {
+      throw new Error(`${method} assumes lognormal components, which capping breaks (the clipped performance has point masses at the cap and floor); use MC or QMC for capped components.`);
+    }
+    // The clip lives in effectiveUnderlying (every underlyingMode basket) and
+    // in the "basket" product's own aggregation. Rainbow and Himalayan read
+    // the raw per-asset paths directly -- best-of/worst-of ranking and
+    // sequential lock-in respectively -- so a cap set there would be silently
+    // ignored. Reject it rather than quietly return an uncapped price.
+    if (config.capComponents && config.underlyingMode === "single"
+      && config.product !== "basket") {
+      throw new Error(`Component capping needs a basket: use the basket product, or set an underlying mode other than "single". ${config.product} reads its per-asset paths directly and would ignore the cap.`);
+    }
     const started = typeof performance !== "undefined" ? performance.now() : Date.now();
     let result;
     if (method === "mc" || method === "qmc") result = monteCarloPrice(config, method);

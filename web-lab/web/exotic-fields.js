@@ -290,6 +290,12 @@
     percent("volatility3", "Asset 3 initial volatility", 30, { min: 0.01 }), percent("dividendYield3", "Asset 3 dividend yield", 0),
     percent("borrow3", "Asset 3 borrow cost", 0),
     { name: "correlation", label: "Common asset correlation", value: 0.35, min: -0.49, max: 0.99, step: 0.01 },
+    // Individually capped/floored components. The clip is on each asset's
+    // performance ratio at every observation date, before the basket is
+    // formed -- so it applies to any multi-asset mode, not just Asians.
+    { name: "capComponents", label: "Cap / floor each component", type: "checkbox", checked: false },
+    { name: "componentCap", label: "Component cap / initial", value: 1.3, min: 0, step: 0.01 },
+    { name: "componentFloor", label: "Component floor / initial", value: 0.7, min: 0, step: 0.01 },
   ];
 
   // `onScheduleModeChange` is optional -- only the "scheduleMode" field (part
