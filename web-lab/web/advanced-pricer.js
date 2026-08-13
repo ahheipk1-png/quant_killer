@@ -908,63 +908,118 @@
     );
   }
 
+  // Curran's geometric conditioning, restructured so that nothing which is
+  // independent of the conditioning variable z sits inside the quadrature.
+  // Three things were being redone on every one of the 321 Simpson nodes:
+  //
+  //   1. an O(n^2) covarianceY / varianceY setup that never depended on z at
+  //      all (it was outside the loop, but still quadratic);
+  //   2. one exp() per fixing for the conditional mean;
+  //   3. for the two-moment variant, a full O(n^2) block of exp() calls for
+  //      the conditional covariance -- which is also entirely z-independent,
+  //      so all 321 repetitions of it were redundant.
+  //
+  // (1) telescopes on a sorted schedule exactly as in asianMoments:
+  // sum_j min(t_i,t_j) = prefix(t)_i + t_i * (n-1-i), so it drops to O(n).
+  // (2) the conditional mean is A_i * exp(beta_i * z) and the Simpson nodes
+  // are uniformly spaced, so exp(beta_i * z_{k+1}) = exp(beta_i * z_k) *
+  // exp(beta_i * dz) -- one multiply per node instead of one exp, with the
+  // exponentials hoisted into a single O(n) setup pass.
+  // (3) is simply lifted out of the loop and reused.
   function conditionalAsianPrice(config, twoMoment) {
-    const { times } = asianMoments(config);
+    const schedule = scheduleFor(config);
+    const times = config.includeInitialFixing ? [0, ...schedule] : schedule;
     const count = times.length;
     const weight = 1.0 / count;
     const sigma2 = config.volatility ** 2;
     const drift = config.rate - config.dividendYield - 0.5 * sigma2;
-    const means = times.map((time) => Math.log(config.spot) + drift * time);
-    const meanY = means.reduce((sum, value) => sum + value, 0.0) / count;
-    let varianceY = 0.0;
+    const logSpot = Math.log(config.spot);
+
+    // O(n) replacement for the old quadratic setup.
     const covarianceY = new Float64Array(count);
-    for (let first = 0; first < count; first += 1) {
-      for (let second = 0; second < count; second += 1) {
-        const covariance = sigma2 * Math.min(times[first], times[second]);
-        varianceY += weight * weight * covariance;
-        covarianceY[first] += weight * covariance;
-      }
+    let prefixTime = 0.0;
+    let varianceY = 0.0;
+    for (let i = 0; i < count; i += 1) {
+      prefixTime += times[i];
+      covarianceY[i] = weight * sigma2 * (prefixTime + times[i] * (count - 1 - i));
+      varianceY += weight * covarianceY[i];
     }
     if (varianceY <= 1e-16) return levyPrice(config);
     const rootVarianceY = Math.sqrt(varianceY);
+
     const lower = -8.0;
     const upper = 8.0;
     const intervals = 320;
     const dz = (upper - lower) / intervals;
-    const integrand = (z) => {
-      const y = meanY + rootVarianceY * z;
-      const conditionalMeans = new Float64Array(count);
-      const conditionalLogMeans = new Float64Array(count);
-      let firstMoment = 0.0;
-      for (let index = 0; index < count; index += 1) {
-        const logMean = means[index] + covarianceY[index] / varianceY * (y - meanY);
-        const logVariance = sigma2 * times[index] - covarianceY[index] ** 2 / varianceY;
-        conditionalLogMeans[index] = logMean;
-        conditionalMeans[index] = Math.exp(logMean + 0.5 * Math.max(logVariance, 0.0));
-        firstMoment += weight * conditionalMeans[index];
+
+    // level[] holds conditionalMean_i at the current node; ratio[] steps it.
+    const level = new Float64Array(count);
+    const ratio = new Float64Array(count);
+    for (let i = 0; i < count; i += 1) {
+      const mean = logSpot + drift * times[i];
+      const beta = covarianceY[i] / rootVarianceY;
+      const logVariance = Math.max(
+        sigma2 * times[i] - covarianceY[i] * covarianceY[i] / varianceY, 0.0);
+      level[i] = Math.exp(mean + 0.5 * logVariance + beta * lower);
+      ratio[i] = Math.exp(beta * dz);
+    }
+
+    // Two-moment only: exp(conditional covariance), z-independent, symmetric.
+    // times is sorted, so min(t_i, t_j) = t_i whenever i <= j. Skipped above
+    // a size where the n^2 buffer would be a liability, in which case the
+    // exponentials are taken inline as before (correct, just slower).
+    const kernel = (twoMoment && count <= 1500) ? new Float64Array(count * count) : null;
+    if (kernel) {
+      for (let i = 0; i < count; i += 1) {
+        for (let j = i; j < count; j += 1) {
+          const value = Math.exp(
+            sigma2 * times[i] - covarianceY[i] * covarianceY[j] / varianceY);
+          kernel[i * count + j] = value;
+          kernel[j * count + i] = value;
+        }
       }
+    }
+
+    const gaussian = 1.0 / Math.sqrt(2.0 * Math.PI);
+    let total = 0.0;
+    for (let node = 0; node <= intervals; node += 1) {
+      const simpson = (node === 0 || node === intervals) ? 1.0 : (node % 2 ? 4.0 : 2.0);
+      let firstMoment = 0.0;
+      for (let i = 0; i < count; i += 1) firstMoment += level[i];
+      firstMoment *= weight;
+
       let conditionalPayoff;
       if (!twoMoment) {
         conditionalPayoff = Base.vanillaPayoff(firstMoment, config.strike, config.optionType);
       } else {
         let secondMoment = 0.0;
-        for (let first = 0; first < count; first += 1) {
-          for (let second = 0; second < count; second += 1) {
-            const covariance = sigma2 * Math.min(times[first], times[second]) -
-              covarianceY[first] * covarianceY[second] / varianceY;
-            secondMoment += weight * weight * conditionalMeans[first] *
-              conditionalMeans[second] * Math.exp(covariance);
+        if (kernel) {
+          for (let i = 0; i < count; i += 1) {
+            const row = i * count;
+            let accumulated = 0.0;
+            for (let j = 0; j < count; j += 1) accumulated += kernel[row + j] * level[j];
+            secondMoment += level[i] * accumulated;
+          }
+        } else {
+          for (let i = 0; i < count; i += 1) {
+            for (let j = 0; j < count; j += 1) {
+              secondMoment += level[i] * level[j] * Math.exp(
+                sigma2 * Math.min(times[i], times[j]) -
+                covarianceY[i] * covarianceY[j] / varianceY);
+            }
           }
         }
+        secondMoment *= weight * weight;
         conditionalPayoff = lognormalOption(
           firstMoment, secondMoment, config.strike, config.optionType, 1.0,
         );
       }
-      return conditionalPayoff * Math.exp(-0.5 * z * z) / Math.sqrt(2.0 * Math.PI);
-    };
-    let total = integrand(lower) + integrand(upper);
-    for (let index = 1; index < intervals; index += 1) {
-      total += (index % 2 ? 4.0 : 2.0) * integrand(lower + index * dz);
+
+      const z = lower + node * dz;
+      total += simpson * conditionalPayoff * Math.exp(-0.5 * z * z) * gaussian;
+      if (node < intervals) {
+        for (let i = 0; i < count; i += 1) level[i] *= ratio[i];
+      }
     }
     return Math.exp(-config.rate * config.maturity) * total * dz / 3.0;
   }
