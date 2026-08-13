@@ -1,4 +1,4 @@
-importScripts("exotic-pricer.js?v=16", "advanced-pricer.js?v=12");
+importScripts("exotic-pricer.js?v=16", "advanced-pricer.js?v=14");
 
 self.addEventListener("message", (event) => {
   if (event.data?.type !== "price-portfolio") return;

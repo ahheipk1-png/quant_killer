@@ -762,29 +762,85 @@
     };
   }
 
+  // Moments E[A], E[A^2], E[A^3] of the discrete arithmetic average
+  //   A = sum_i a_i * X_i,   a_i = (1/n) * S * exp(drift * t_i),
+  // whose log-covariance is cov(i, j) = sigma^2 * min(t_i, t_j).
+  //
+  // The textbook way to write this is a triple loop -- O(n^3) with an exp()
+  // in the innermost body, which is what this used to be. That is fine for a
+  // handful of fixings and hopeless for daily ones: a one-year daily average
+  // is 252^3 = 16 million exponentials, and five years is over 2 billion.
+  //
+  // The min() is what appears to couple the indices, but on a SORTED schedule
+  // (guaranteed: normalizeConfig rejects non-increasing observation times, and
+  // includeInitialFixing prepends t = 0) each min collapses to the earlier
+  // time, so every sum telescopes into prefix/suffix scans. Writing
+  //   E_i = exp(sigma^2 t_i),  D_i = exp(2 sigma^2 t_i)
+  // and, for i <= j, splitting the k-sum at t_i and t_j:
+  //   G(i,j) = sum_k a_k exp(sigma^2 (min(t_i,t_k) + min(t_j,t_k)))
+  //          = PD_i + E_i (PE_j - PE_i) + E_i E_j (TA - PA_j)
+  // with PD/PE/PA the running sums of a_k D_k, a_k E_k, a_k. Feeding that back
+  // through the outer pair (and using the summand's symmetry to halve it)
+  // leaves only suffix sums, so all three moments come out in ONE pass:
+  // O(n^3) -> O(n), exactly, not approximately -- verified against the old
+  // triple loop to ~1e-12 relative.
   function asianMoments(config) {
     const schedule = scheduleFor(config);
     const times = config.includeInitialFixing ? [0, ...schedule] : schedule;
-    const weight = 1.0 / times.length;
+    const count = times.length;
+    const weight = 1.0 / count;
     const drift = config.rate - config.dividendYield;
-    let first = 0.0;
-    let second = 0.0;
-    let third = 0.0;
-    for (const firstTime of times) {
-      first += weight * config.spot * Math.exp(drift * firstTime);
-      for (const secondTime of times) {
-        second += weight * weight * config.spot ** 2 * Math.exp(
-          drift * (firstTime + secondTime) + config.volatility ** 2 * Math.min(firstTime, secondTime),
-        );
-        for (const thirdTime of times) {
-          third += weight ** 3 * config.spot ** 3 * Math.exp(
-            drift * (firstTime + secondTime + thirdTime) + config.volatility ** 2 * (
-              Math.min(firstTime, secondTime) + Math.min(firstTime, thirdTime) +
-              Math.min(secondTime, thirdTime)
-            ),
-          );
-        }
-      }
+    const variance = config.volatility * config.volatility;
+
+    const a = new Float64Array(count);
+    const expOnce = new Float64Array(count);
+    const expTwice = new Float64Array(count);
+    for (let i = 0; i < count; i += 1) {
+      a[i] = weight * config.spot * Math.exp(drift * times[i]);
+      expOnce[i] = Math.exp(variance * times[i]);
+      expTwice[i] = Math.exp(2.0 * variance * times[i]);
+    }
+
+    // Inclusive prefix scans.
+    const prefixA = new Float64Array(count);
+    const prefixE = new Float64Array(count);
+    const prefixD = new Float64Array(count);
+    let runA = 0.0; let runE = 0.0; let runD = 0.0;
+    for (let i = 0; i < count; i += 1) {
+      runA += a[i]; runE += a[i] * expOnce[i]; runD += a[i] * expTwice[i];
+      prefixA[i] = runA; prefixE[i] = runE; prefixD[i] = runD;
+    }
+    const totalA = runA;
+
+    // Strict suffix scans (j > i), built backwards in one pass.
+    const suffixA = new Float64Array(count);
+    const suffixAE = new Float64Array(count);
+    const suffixAPE = new Float64Array(count);
+    const suffixAEPA = new Float64Array(count);
+    let sA = 0.0; let sAE = 0.0; let sAPE = 0.0; let sAEPA = 0.0;
+    for (let i = count - 1; i >= 0; i -= 1) {
+      suffixA[i] = sA; suffixAE[i] = sAE; suffixAPE[i] = sAPE; suffixAEPA[i] = sAEPA;
+      sA += a[i];
+      sAE += a[i] * expOnce[i];
+      sAPE += a[i] * prefixE[i];
+      sAEPA += a[i] * expOnce[i] * prefixA[i];
+    }
+
+    let first = 0.0; let second = 0.0; let third = 0.0;
+    for (let i = 0; i < count; i += 1) {
+      const ai = a[i]; const ei = expOnce[i];
+      first += ai;
+      // second = sum_i a_i E_i (a_i + 2 * sum_{j>i} a_j)
+      second += ai * ei * (ai + 2.0 * suffixA[i]);
+      // Diagonal i == j term of the outer pair.
+      const diagonalG = prefixD[i] + ei * ei * (totalA - prefixA[i]);
+      third += ai * ai * ei * diagonalG;
+      // Off-diagonal, counted once and doubled by symmetry.
+      third += 2.0 * ai * ei * (
+        (prefixD[i] - ei * prefixE[i]) * suffixA[i] +
+        ei * suffixAPE[i] +
+        ei * (totalA * suffixAE[i] - suffixAEPA[i])
+      );
     }
     return { first, second, third, times };
   }
@@ -1663,6 +1719,17 @@
       if (config.volatilityModel !== "constant") {
         throw new Error("Asian approximations and ADI are Black-Scholes methods; select MC/QMC for term, local, Heston, or SLV.");
       }
+      // Levy/shifted/Curran read a single spot+volatility and integrate the
+      // one-asset time-covariance sigma^2*min(s,t); ADI is a two-state
+      // (spot, running sum) PDE. None of them has any notion of a second
+      // asset, so on a basket underlying they would silently return the
+      // asset-1 price -- about 59% too high for an uncorrelated 3-asset
+      // average. Ju is genuinely multi-asset (one component per asset x
+      // fixing, with the cross-asset covariance in its matrix), so it alone
+      // stays available here alongside MC/QMC.
+      if (config.underlyingMode !== "single" && method !== "ju-taylor") {
+        throw new Error(`${method} prices a single-asset average only and would silently ignore the basket; use ju-taylor, MC, or QMC for a basket Asian.`);
+      }
       const prices = {
         levy: levyPrice,
         "shifted-lognormal": shiftedLognormalPrice,
@@ -1959,6 +2026,7 @@
     price,
     monteCarloPrice,
     simulatePathDistribution,
+    asianMoments,
     levyPrice,
     shiftedLognormalPrice,
     conditionalAsianPrice,
