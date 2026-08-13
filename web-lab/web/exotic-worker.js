@@ -1,5 +1,5 @@
 importScripts("exotic-pricer.js?v=11");
-importScripts("advanced-pricer.js?v=8");
+importScripts("advanced-pricer.js?v=11");
 
 postMessage({
   type: "ready",

@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="exotics.css?v=3">
     <script src="polyglot-contract.js" defer></script>
     <script src="holiday-calendars.js?v=1" defer></script>
-    <script src="exotic-fields.js?v=8" defer></script>
-    <script src="app.js?v=19" defer></script>
+    <script src="exotic-fields.js?v=9" defer></script>
+    <script src="app.js?v=20" defer></script>
   </head>
   <body>
     <main class="page-shell">
@@ -187,11 +187,23 @@
                 Asset count
                 <input name="assetCount" type="number" min="2" max="20" step="1" value="3" disabled>
               </label>
-              <label class="field" data-payoff-only="barrier">
+              <label class="field" data-payoff-only="basket" hidden>
+                Basket payoff
+                <select name="basketPayoff" disabled>
+                  <option value="vanilla">Vanilla call/put</option>
+                  <option value="digital">Digital / binary</option>
+                  <option value="barrier">Single barrier</option>
+                </select>
+              </label>
+              <label class="field" data-payoff-only="digital,basket" data-basket-payoff-only="digital" hidden>
+                Cash payoff
+                <input name="cashPayoff" type="number" min="0" step="any" value="10" disabled>
+              </label>
+              <label class="field" data-payoff-only="barrier,basket" data-basket-payoff-only="barrier">
                 Barrier level
                 <input name="barrier" type="number" min="0.0001" step="any" value="125">
               </label>
-              <label class="field" data-payoff-only="barrier">
+              <label class="field" data-payoff-only="barrier,basket" data-basket-payoff-only="barrier">
                 Barrier direction
                 <select name="barrierDirection">
                   <option value="up">Up</option>
@@ -206,7 +218,7 @@
                 Upper barrier
                 <input name="upperBarrier" type="number" min="0.0001" step="any" value="130" disabled>
               </label>
-              <label class="field" data-payoff-only="barrier,double-barrier">
+              <label class="field" data-payoff-only="barrier,double-barrier,basket" data-basket-payoff-only="barrier">
                 Barrier style
                 <select name="barrierStyle">
                   <option value="out">Knock-out</option>

@@ -62,8 +62,24 @@ function renderProductFields() {
   optionTypeField.hidden = ["autocallable", "phoenix-autocall", "yield-seeker", "himalayan", "compound",
     "variance-swap", "volatility-swap", "accumulator"].includes(product);
   updateScheduleFields();
+  updateBasketPayoffFields();
   renderBasketFields();
   updateMethodOptions();
+}
+
+// The basket product's cashPayoff / barrier / barrierDirection / barrierStyle
+// fields are all rendered up front (unlike scheduleMode's fields, they have
+// no data-payoff-only equivalent within a single product), so a sub-mode
+// change here only needs to toggle their hidden state, mirroring
+// updateScheduleFields' pattern.
+function updateBasketPayoffFields() {
+  if (productSelect.value !== "basket") return;
+  const mode = form.elements.basketPayoff?.value || "vanilla";
+  for (const element of productFields.querySelectorAll("[data-field-name]")) {
+    const name = element.dataset.fieldName;
+    if (name === "cashPayoff") element.hidden = mode !== "digital";
+    if (["barrier", "barrierDirection", "barrierStyle"].includes(name)) element.hidden = mode !== "barrier";
+  }
 }
 
 function updateScheduleFields() {
@@ -79,7 +95,9 @@ function updateScheduleFields() {
 
 function availableMethods() {
   if (languageSelect.value !== "js") return ["mc"];
-  const methods = metadata.methods[productSelect.value] || referenceMethods[productSelect.value] || ["mc"];
+  const methods = productSelect.value === "basket"
+    ? ExoticFields.basketMethodsFor(form.elements.basketPayoff?.value || "vanilla")
+    : metadata.methods[productSelect.value] || referenceMethods[productSelect.value] || ["mc"];
   if (volatilitySelect.value === "constant") return methods;
   if (productSelect.value === "variance-swap" && volatilitySelect.value === "term") {
     return methods.filter((method) => ["static-replication", "mc", "qmc"].includes(method));
@@ -354,6 +372,15 @@ productSelect.addEventListener("change", () => {
 volatilitySelect.addEventListener("change", renderVolatilityFields);
 underlyingSelect.addEventListener("change", renderBasketFields);
 methodSelect.addEventListener("change", updateMethodFields);
+// productFields is replaced wholesale on every product change, so the
+// basketPayoff select is a fresh element each time -- delegate instead of
+// binding a listener to an element that gets thrown away.
+productFields.addEventListener("change", (event) => {
+  if (event.target.name === "basketPayoff") {
+    updateBasketPayoffFields();
+    updateMethodOptions();
+  }
+});
 
 renderVolatilityFields();
 renderProductFields();

@@ -44,7 +44,11 @@
 
   const ADVANCED_PRODUCT_METHODS = Object.freeze({
     asian: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "adi", "mc", "qmc"],
-    basket: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "mc", "qmc"],
+    // Union across all three basketPayoff sub-modes (vanilla/digital/
+    // barrier) -- price() validates the actual method/sub-mode combination;
+    // the UI (ExoticFields.basketMethodsFor) narrows the dropdown per mode.
+    basket: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor",
+      "closed-form-daily", "closed-form-weekly", "closed-form-terminal", "mc", "qmc"],
     "phoenix-autocall": ["mc", "qmc"],
     "variance-swap": ["static-replication", "mc", "qmc"],
     "volatility-swap": ["mc", "qmc"],
@@ -179,6 +183,7 @@
       pdeAverageGrid: Math.trunc(Number(input.pdeAverageGrid ?? 72)),
       pdeTimeSteps: Math.trunc(Number(input.pdeTimeSteps ?? 220)),
       underlyingMode: input.underlyingMode || "single",
+      basketPayoff: input.basketPayoff || "vanilla",
       basketAssetCount: Math.trunc(Number(input.basketAssetCount ?? 3)),
       basketWeights: Array.isArray(input.basketWeights)
         ? input.basketWeights.map(Number)
@@ -461,9 +466,21 @@
     }
     if (config.product === "basket") {
       const weights = normalizedWeights(config, assetCountFor(config));
-      const basket = simulation.paths.reduce((sum, path, index) =>
-        sum + weights[index] * path[schedule.length - 1], 0.0);
-      return discount * Base.vanillaPayoff(basket, config.strike, config.optionType);
+      const basketAt = (step) => simulation.paths.reduce((sum, path, index) =>
+        sum + weights[index] * path[step], 0.0);
+      const terminal = basketAt(schedule.length - 1);
+      if (config.basketPayoff === "digital") {
+        return discount * Base.digitalPayoff(terminal, config.strike, config.optionType, config.cashPayoff);
+      }
+      if (config.basketPayoff === "barrier") {
+        const hit = Array.from({ length: schedule.length }, (_, step) => basketAt(step))
+          .some((value) => config.barrierDirection === "up"
+            ? value >= config.barrier : value <= config.barrier);
+        return discount * Base.singleBarrierPayoff(
+          terminal, config.strike, config.optionType, hit ? 0 : 1, config.barrierStyle,
+        );
+      }
+      return discount * Base.vanillaPayoff(terminal, config.strike, config.optionType);
     }
     if (config.product === "autocallable") {
       const redemption = Base.autocallablePayoff(primary, {
@@ -774,9 +791,12 @@
     );
   }
 
-  function shiftedLognormalFromMoments(first, second, third, strike, optionType, discount) {
+  // Shared fit: shift + L, L lognormal, matched to (first, second, third) by
+  // solving skewness = (m+2)*sqrt(m-1) for the log-variance ratio m = E[e^V].
+  // Returns null when the distribution is already degenerate (point mass).
+  function fitShiftedLognormal(first, second, third) {
     const variance = Math.max(second - first * first, 0.0);
-    if (variance <= 1e-16) return discount * Base.vanillaPayoff(first, strike, optionType);
+    if (variance <= 1e-16) return null;
     const centralThird = third - 3 * first * second + 2 * first ** 3;
     const skewness = Math.max(centralThird / variance ** 1.5, 0.0);
     let lower = 1.0 + 1e-12;
@@ -790,6 +810,13 @@
     const expVariance = 0.5 * (lower + upper);
     const lognormalMean = Math.sqrt(variance / (expVariance - 1.0));
     const shift = first - lognormalMean;
+    return { shift, lognormalMean, expVariance };
+  }
+
+  function shiftedLognormalFromMoments(first, second, third, strike, optionType, discount) {
+    const fit = fitShiftedLognormal(first, second, third);
+    if (!fit) return discount * Base.vanillaPayoff(first, strike, optionType);
+    const { shift, lognormalMean, expVariance } = fit;
     const adjustedStrike = strike - shift;
     if (adjustedStrike <= 0) {
       const call = discount * (first - strike);
@@ -1180,6 +1207,187 @@
     });
   }
 
+  // P(L > strike) under a lognormal matched to (first, second) -- same N(d2)
+  // used inside lognormalOption, exposed standalone for digital payoffs.
+  function lognormalSurvivalProbability(first, second, strike) {
+    const variance = Math.max(second - first * first, 0.0);
+    if (variance <= 1e-16) return first > strike ? 1.0 : 0.0;
+    const logVariance = Math.log(second / (first * first));
+    const root = Math.sqrt(logVariance);
+    const d1 = (Math.log(first / strike) + 0.5 * logVariance) / root;
+    return Base.normalCdf(d1 - root);
+  }
+
+  // Cash-or-nothing digital, C(K) = discount*cashPayoff*N(d2) = -cashPayoff*dC/dK
+  // for ANY distribution with a differentiable call price C(K) -- so Ju's
+  // basket call, which has no closed-form digital of its own, still yields
+  // one via a central finite difference in strike.
+  function juBasketDigitalPrice(config) {
+    const step = Math.max(config.strike * 1e-4, 1e-3);
+    const callAt = (strike) => juBasketPrice({ ...config, strike, optionType: "call" });
+    const derivative = (callAt(config.strike + step) - callAt(config.strike - step)) / (2.0 * step);
+    const discount = Math.exp(-config.rate * config.maturity);
+    const digitalCall = Math.max(-config.cashPayoff * derivative, 0.0);
+    return config.optionType === "call"
+      ? digitalCall
+      : Math.max(discount * config.cashPayoff - digitalCall, 0.0);
+  }
+
+  function basketDigitalPrice(config, method) {
+    const discount = Math.exp(-config.rate * config.maturity);
+    const moments = basketMoments(config);
+    let survival;
+    if (method === "shifted-lognormal") {
+      const fit = fitShiftedLognormal(moments.first, moments.second, moments.third);
+      if (!fit) {
+        survival = moments.first > config.strike ? 1.0 : 0.0;
+      } else {
+        const adjustedStrike = config.strike - fit.shift;
+        survival = adjustedStrike <= 0 ? 1.0 : lognormalSurvivalProbability(
+          fit.lognormalMean, fit.lognormalMean * fit.lognormalMean * fit.expVariance, adjustedStrike,
+        );
+      }
+    } else {
+      survival = lognormalSurvivalProbability(moments.first, moments.second, config.strike);
+    }
+    const probability = config.optionType === "call" ? survival : 1.0 - survival;
+    return discount * config.cashPayoff * probability;
+  }
+
+  // Curran conditioning, digital variant: the conditional payoff is a
+  // survival probability rather than a truncated mean -- one-moment treats
+  // the conditional law as a point mass at its mean (an indicator), the
+  // two-moment variant integrates the conditional lognormal's N(d2).
+  function conditionalBasketDigitalPrice(config, twoMoment) {
+    const { assets, spots, volatilities, dividends, weights } = basketLegs(config);
+    const maturity = config.maturity;
+    const means = spots.map((spot, index) => Math.log(spot) +
+      (config.rate - dividends[index] - 0.5 * volatilities[index] ** 2) * maturity);
+    const covariance = (first, second) => volatilities[first] * volatilities[second] *
+      (first === second ? 1.0 : config.correlation) * maturity;
+    let meanY = 0.0;
+    let varianceY = 0.0;
+    const covarianceY = new Float64Array(assets);
+    for (let i = 0; i < assets; i += 1) {
+      meanY += weights[i] * means[i];
+      for (let j = 0; j < assets; j += 1) {
+        varianceY += weights[i] * weights[j] * covariance(i, j);
+        covarianceY[i] += weights[j] * covariance(i, j);
+      }
+    }
+    if (varianceY <= 1e-16) return basketDigitalPrice(config, "levy");
+    const rootVarianceY = Math.sqrt(varianceY);
+    const discount = Math.exp(-config.rate * maturity);
+
+    const conditionalMomentsAt = (z) => {
+      const y = meanY + rootVarianceY * z;
+      const conditionalMeans = new Float64Array(assets);
+      let firstMoment = 0.0;
+      for (let index = 0; index < assets; index += 1) {
+        const logMean = means[index] + covarianceY[index] / varianceY * (y - meanY);
+        const logVariance = volatilities[index] ** 2 * maturity - covarianceY[index] ** 2 / varianceY;
+        conditionalMeans[index] = Math.exp(logMean + 0.5 * Math.max(logVariance, 0.0));
+        firstMoment += weights[index] * conditionalMeans[index];
+      }
+      return { conditionalMeans, firstMoment };
+    };
+
+    // Per-asset conditional log-variance is constant in z (it depends only
+    // on covarianceY/varianceY, not on the conditioning value itself). When
+    // every asset's residual variance is degenerate -- always true for a
+    // single asset, since Y determines it exactly -- the "two-moment" N(d2)
+    // integrand collapses to the same hard indicator as one-moment, and
+    // needs the same exact bisection fix rather than Simpson quadrature.
+    const residualDegenerate = Array.from({ length: assets }, (_, index) =>
+      volatilities[index] ** 2 * maturity - covarianceY[index] ** 2 / varianceY)
+      .every((value) => value <= 1e-12);
+
+    if (!twoMoment || residualDegenerate) {
+      // The one-moment payoff is a hard indicator(firstMoment(z) > strike).
+      // firstMoment(z) is a positive-weighted sum of exp(affine-in-z) terms
+      // (each conditional log-mean is affine in z), so it is strictly
+      // increasing in z and crosses the strike exactly once -- find that
+      // crossing by bisection and read the exact tail probability off the
+      // standard normal CDF, rather than Simpson-integrating the indicator
+      // directly. Simpson's rule assumes local smoothness and is unsound
+      // across a jump: integrating the textbook indicator(z>0), whose exact
+      // value is precisely 0.5 by symmetry, at this same 320-point
+      // resolution yields 0.4934 -- a ~1.3% bias that this construction
+      // sidesteps entirely.
+      let lower = -12.0;
+      let upper = 12.0;
+      for (let iteration = 0; iteration < 80; iteration += 1) {
+        const middle = 0.5 * (lower + upper);
+        if (conditionalMomentsAt(middle).firstMoment > config.strike) upper = middle;
+        else lower = middle;
+      }
+      const crossing = 0.5 * (lower + upper);
+      const survivalAboveCrossing = 1.0 - Base.normalCdf(crossing);
+      const probability = config.optionType === "call" ? survivalAboveCrossing : 1.0 - survivalAboveCrossing;
+      return discount * config.cashPayoff * probability;
+    }
+
+    // Two-moment: the conditional survival probability N(d2)-style function
+    // of z is smooth (no jump), so Simpson quadrature is the right tool here.
+    const lower = -8.0;
+    const upper = 8.0;
+    const intervals = 320;
+    const dz = (upper - lower) / intervals;
+    const integrand = (z) => {
+      const { conditionalMeans, firstMoment } = conditionalMomentsAt(z);
+      let secondMoment = 0.0;
+      for (let first = 0; first < assets; first += 1) {
+        for (let second = 0; second < assets; second += 1) {
+          const conditionalCovariance = covariance(first, second) -
+            covarianceY[first] * covarianceY[second] / varianceY;
+          secondMoment += weights[first] * weights[second] * conditionalMeans[first] *
+            conditionalMeans[second] * Math.exp(conditionalCovariance);
+        }
+      }
+      const survival = lognormalSurvivalProbability(firstMoment, secondMoment, config.strike);
+      const probability = config.optionType === "call" ? survival : 1.0 - survival;
+      return probability * Math.exp(-0.5 * z * z) / Math.sqrt(2.0 * Math.PI);
+    };
+    let total = integrand(lower) + integrand(upper);
+    for (let index = 1; index < intervals; index += 1) {
+      total += (index % 2 ? 4.0 : 2.0) * integrand(lower + index * dz);
+    }
+    return discount * config.cashPayoff * total * dz / 3.0;
+  }
+
+  // Collapse the basket to a single effective GBM: match spot to the real
+  // basket value today, volatility to the 2-moment (Levy) terminal-variance
+  // match, and carry so the forward matches exactly. This is the "cruder"
+  // route needed for barrier products -- Curran/Ju approximate only the
+  // TERMINAL marginal, with no path/running-maximum structure to hand a
+  // barrier formula, so only the 2-moment effective-GBM extends to them.
+  function basketEffectiveConfig(config) {
+    const { spots, weights } = basketLegs(config);
+    const basketSpot = spots.reduce((sum, spot, index) => sum + weights[index] * spot, 0.0);
+    const moments = basketMoments(config);
+    const maturity = config.maturity;
+    const logVariance = Math.log(moments.second / (moments.first * moments.first));
+    const effectiveVolatility = Math.sqrt(Math.max(logVariance, 0.0) / maturity);
+    const effectiveCarry = Math.log(moments.first / basketSpot) / maturity;
+    return {
+      ...config,
+      spot: basketSpot,
+      volatility: Math.max(effectiveVolatility, 1e-8),
+      dividendYield: config.rate - effectiveCarry,
+    };
+  }
+
+  function basketBarrierTerminalPrice(config) {
+    const effective = { ...basketEffectiveConfig(config), product: "barrier" };
+    return Base.barrierTerminalClosedForm(effective);
+  }
+
+  function basketBarrierContinuousPrice(config, frequency) {
+    const effective = { ...basketEffectiveConfig(config), product: "barrier" };
+    if (frequency == null) return Base.barrierClosedForm(effective);
+    return Base.barrierClosedForm(Base.bgkShiftedConfig(effective, frequency));
+  }
+
   function thomasSolve(lower, diagonal, upper, right) {
     const count = diagonal.length;
     const cPrime = new Float64Array(count);
@@ -1445,17 +1653,55 @@
       if (normalizedWeights(config, assetCountFor(config)).some((weight) => !(weight > 0))) {
         throw new Error("Basket moment matching requires strictly positive weights; use MC or QMC for long-short baskets.");
       }
-      const prices = {
-        levy: basketLevyPrice,
-        "shifted-lognormal": basketShiftedLognormalPrice,
-        curran: (value) => conditionalBasketPrice(value, false),
-        "curran-two-moment": (value) => conditionalBasketPrice(value, true),
-        "ju-taylor": juBasketPrice,
-      };
-      const value = prices[method](config);
+      let value;
+      let benchmarkSteps;
+      if (config.basketPayoff === "digital") {
+        const prices = {
+          levy: (cfg) => basketDigitalPrice(cfg, "levy"),
+          "shifted-lognormal": (cfg) => basketDigitalPrice(cfg, "shifted-lognormal"),
+          curran: (cfg) => conditionalBasketDigitalPrice(cfg, false),
+          "curran-two-moment": (cfg) => conditionalBasketDigitalPrice(cfg, true),
+          "ju-taylor": juBasketDigitalPrice,
+        };
+        if (!prices[method]) throw new Error(`${method} is not available for a basket digital.`);
+        value = prices[method](config);
+        benchmarkSteps = 1;
+      } else if (config.basketPayoff === "barrier") {
+        // No plain-continuous entry: AdvancedPricer's Monte Carlo is a
+        // discrete indicator with no Brownian-bridge correction (that
+        // machinery lives only in ExoticPricer's single-asset engine), so a
+        // continuous closed form would auto-benchmark against a mismatched
+        // discrete MC and silently reproduce the exact discrete-vs-continuous
+        // bias the BGK correction exists to fix. Only offer methods whose MC
+        // counterparty is genuinely apples-to-apples: matched-frequency BGK
+        // or single-step terminal.
+        const frequency = { "closed-form-daily": 252, "closed-form-weekly": 52 }[method];
+        if (method === "closed-form-terminal") {
+          value = basketBarrierTerminalPrice(config);
+          benchmarkSteps = 1;
+        } else if (frequency) {
+          value = basketBarrierContinuousPrice(config, frequency);
+          benchmarkSteps = Math.max(1, Math.round(frequency * config.maturity));
+        } else {
+          throw new Error(`${method} is not available for a basket barrier; only the daily/weekly BGK and terminal effective-lognormal closed forms extend to path-dependent payoffs (no plain continuous entry -- see basket barrier methodNotes).`);
+        }
+      } else {
+        const prices = {
+          levy: basketLevyPrice,
+          "shifted-lognormal": basketShiftedLognormalPrice,
+          curran: (cfg) => conditionalBasketPrice(cfg, false),
+          "curran-two-moment": (cfg) => conditionalBasketPrice(cfg, true),
+          "ju-taylor": juBasketPrice,
+        };
+        if (!prices[method]) throw new Error(`${method} is not available for a basket vanilla.`);
+        value = prices[method](config);
+        benchmarkSteps = 1;
+      }
       // Deterministic Sobol check with zero digital shift, matching the
       // barrier benchmark convention -- reproducible without seed plumbing.
-      const check = monteCarloPrice({ ...config, paths: 32768, randomizedQmc: false }, "qmc");
+      const check = monteCarloPrice(
+        { ...config, paths: 32768, randomizedQmc: false, monitoringSteps: benchmarkSteps }, "qmc",
+      );
       result = {
         price: value, standardError: null, standardDeviation: null, samples: 0,
         benchmark: {
@@ -1686,6 +1932,12 @@
     basketShiftedLognormalPrice,
     conditionalBasketPrice,
     juBasketPrice,
+    basketDigitalPrice,
+    conditionalBasketDigitalPrice,
+    juBasketDigitalPrice,
+    basketEffectiveConfig,
+    basketBarrierTerminalPrice,
+    basketBarrierContinuousPrice,
     asianAdiPrice,
     generalizedCompoundClosedForm,
     staticVarianceSwapPrice,

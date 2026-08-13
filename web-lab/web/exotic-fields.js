@@ -116,6 +116,8 @@
     "double-barrier": ["semi-closed", "closed-form-daily", "closed-form-weekly", "closed-form-terminal", "pde", "mc", "qmc"],
     bermudan: ["tree", "pde", "mc", "qmc"],
     rainbow: ["closed-form", "mc", "qmc"], autocallable: ["mc", "qmc"], himalayan: ["mc", "qmc"],
+    // Default/fallback list for the basket product before a sub-mode is
+    // known -- the actual dropdown always narrows via basketMethodsFor().
     basket: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "mc", "qmc"],
     lookback: ["closed-form", "mc", "qmc"], ladder: ["mc", "qmc"],
     compound: ["closed-form", "mc", "qmc"],
@@ -124,6 +126,21 @@
     "variance-swap": ["static-replication", "mc", "qmc"], "volatility-swap": ["mc", "qmc"],
     "variance-option": ["mc", "qmc"], "volatility-option": ["mc", "qmc"], accumulator: ["mc", "qmc"],
   };
+
+  // Basket sub-mode -> method list. Vanilla and digital share the full
+  // moment-matching set (Ju digital rides a central finite difference in
+  // strike on the vanilla Ju price). Barrier is deliberately narrower: only
+  // the 2-moment effective-lognormal/effective-GBM route extends to a
+  // path-dependent payoff -- Curran and Ju approximate the terminal
+  // marginal only, with no running-maximum structure to hand a barrier
+  // formula, and there is no plain-continuous entry because the basket
+  // Monte Carlo benchmark has no Brownian-bridge correction to match it.
+  const basketMethodsByPayoff = {
+    vanilla: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "mc", "qmc"],
+    digital: ["levy", "shifted-lognormal", "curran", "curran-two-moment", "ju-taylor", "mc", "qmc"],
+    barrier: ["closed-form-daily", "closed-form-weekly", "closed-form-terminal", "mc", "qmc"],
+  };
+  const basketMethodsFor = (payoffMode) => basketMethodsByPayoff[payoffMode] || basketMethodsByPayoff.vanilla;
 
   const percent = (name, label, value, extra = {}) => ({ name, label, value, suffix: "%", transform: "percent", min: 0, step: "any", ...extra });
   const select = (name, label, options, value) => ({ name, label, type: "select", options, value });
@@ -164,6 +181,13 @@
     ],
     basket: [
       select("assetCount", "Asset count", [["2", "Two"], ["3", "Three"]], "2"),
+      select("basketPayoff", "Basket payoff", [
+        ["vanilla", "Vanilla call/put"], ["digital", "Digital / binary"], ["barrier", "Single barrier"],
+      ], "vanilla"),
+      { name: "cashPayoff", label: "Cash payoff", value: 10, min: 0, step: "any" },
+      { name: "barrier", label: "Barrier level", value: 125, min: 0.0001, step: "any" },
+      select("barrierDirection", "Barrier direction", [["up", "Up"], ["down", "Down"]]),
+      select("barrierStyle", "Barrier style", [["out", "Knock-out"], ["in", "Knock-in"]]),
     ],
     autocallable: [
       { name: "notional", label: "Notional", value: 100, min: 0.01, step: "any" }, percent("coupon", "Coupon per observation", 2),
@@ -352,6 +376,7 @@
     productLabels, fallbackDescriptions, languageDefinitions,
     volatilityLabels, volatilityNotes, methodLabels, methodNotes, referenceMethods,
     fieldsByProduct, volatilityFieldDefinitions, basketFieldDefinitions,
+    basketMethodsFor,
     createField, utcDate, followingWeekday, buildObservationTimes, formatNumber,
   };
 }));

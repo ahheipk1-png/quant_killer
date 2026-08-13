@@ -569,6 +569,7 @@ function createInstrumentPanel(prefillEntry) {
   const optionTypeToggle = root.querySelector('[data-optiontype-toggle]');
   const scheduleModeSelect = root.querySelector('.module-dialog[data-module="contractual"] [name="scheduleMode"]');
   const assetCountInput = root.querySelector('[name="assetCount"]');
+  const basketPayoffSelect = root.querySelector('[name="basketPayoff"]');
   const basketAssetsList = root.querySelector('[data-basket-assets]');
   const basketAddAssetButton = root.querySelector('.basket-add-asset');
   const observationDatesList = root.querySelector('[data-observation-dates]');
@@ -676,7 +677,9 @@ function createInstrumentPanel(prefillEntry) {
 
   function availableExoticMethods(product) {
     if (engineSelect.value !== "js") return ["mc"];
-    const methodsForProduct = ExoticFields.referenceMethods[product] || ["mc"];
+    const methodsForProduct = product === "basket"
+      ? ExoticFields.basketMethodsFor(basketPayoffSelect.value)
+      : ExoticFields.referenceMethods[product] || ["mc"];
     if (volatilityModelSelect.value === "constant") return methodsForProduct;
     return methodsForProduct.filter((method) => method === "mc" || method === "qmc");
   }
@@ -867,6 +870,19 @@ function createInstrumentPanel(prefillEntry) {
         : keys.includes(product);
       element.hidden = !visible;
       element.querySelectorAll("input, select").forEach((control) => { control.disabled = !visible; });
+    });
+
+    // Second, narrower pass: within the basket product, cashPayoff and the
+    // barrier trio are further gated by the basket-payoff sub-mode select
+    // (vanilla/digital/barrier) -- data-payoff-only alone can't express this
+    // second dimension, since it only keys off the top-level payoffType.
+    const basketPayoff = basketPayoffSelect.value;
+    root.querySelectorAll("[data-basket-payoff-only]").forEach((element) => {
+      const visible = product === "basket" && element.dataset.basketPayoffOnly === basketPayoff;
+      if (product === "basket") {
+        element.hidden = !visible;
+        element.querySelectorAll("input, select").forEach((control) => { control.disabled = !visible; });
+      }
     });
 
     const SCHEDULE_PRODUCTS = new Set([
@@ -1340,6 +1356,10 @@ function createInstrumentPanel(prefillEntry) {
   });
   exerciseSelect.addEventListener("change", updateMethodOptions);
   payoffTypeSelect.addEventListener("change", updatePayoffVisibility);
+  basketPayoffSelect.addEventListener("change", () => {
+    updatePayoffVisibility();
+    updateExoticMethodOptions();
+  });
   volatilityModelSelect.addEventListener("change", () => {
     renderExoticVolatilityFields();
     updateExoticMethodOptions();
