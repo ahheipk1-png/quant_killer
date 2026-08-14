@@ -42,3 +42,13 @@ the earlier web-lab basket-barrier finding that the effective-GBM
 approximation degrades as the basket's components become more co-moving
 (and therefore further from the single-effective-vol collapse the moment
 match assumes).
+
+## Seasoned state and throughput
+
+`already_touched` (scalar bool — this family prices ONE scenario per call,
+since `spots` is the per-asset vector; a PFE engine loops over scenarios):
+out+touched is dead (expiry rebate still owed), in+touched is a vanilla
+European on the effective-GBM basket. Raises for `trigger="european"`.
+
+Measured throughput (2-asset basket, continuous trigger): **~2,000
+calls/s** per scenario-call.

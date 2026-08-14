@@ -136,6 +136,63 @@ def test_invalid_barrier_ordering_rejected():
                               trigger="continuous", **BASE)
 
 
+# ------------------------------------------------------- already_touched ---
+
+
+def test_touched_out_is_dead():
+    price = price_barrier_double(option_type="call", lower_barrier=80.0, upper_barrier=130.0, style="out",
+                                  trigger="continuous", already_touched=True, **BASE)
+    assert price == pytest.approx(0.0, abs=1e-12)
+
+
+def test_touched_out_expiry_rebate_still_owed():
+    price = price_barrier_double(option_type="call", lower_barrier=80.0, upper_barrier=130.0, style="out",
+                                  trigger="continuous", already_touched=True,
+                                  rebate=5.0, rebate_timing="expiry", **BASE)
+    assert price == pytest.approx(5.0 * math.exp(-BASE["rate"] * BASE["maturity"]), abs=1e-10)
+
+
+def test_touched_in_equals_vanilla_european():
+    price = price_barrier_double(option_type="put", lower_barrier=80.0, upper_barrier=130.0, style="in",
+                                  trigger="continuous", already_touched=True, **BASE)
+    vanilla = price_european(spot=BASE["spot"], strike=BASE["strike"], rate=BASE["rate"],
+                              div_yield=BASE["div_yield"], borrow=BASE["borrow"], maturity=BASE["maturity"],
+                              option_type="put", vol_times=BASE["vol_times"], vol_values=BASE["vol_values"],
+                              value_date=0.0)
+    assert price == pytest.approx(vanilla, abs=1e-9)
+
+
+def test_touched_rejected_for_european_trigger():
+    with pytest.raises(ValueError):
+        price_barrier_double(option_type="call", lower_barrier=80.0, upper_barrier=130.0, style="out",
+                              trigger="european", already_touched=True, **BASE)
+
+
+def test_breached_now_hit_rebate_is_undiscounted():
+    # Spot already beyond a barrier and not previously flagged: the hit
+    # happens NOW, so a rebate-at-hit's PV is the full rebate (this was
+    # previously wrongly discounted by the whole remaining maturity).
+    common = {k: v for k, v in BASE.items() if k != "spot"}
+    price = price_barrier_double(spot=140.0, option_type="call", lower_barrier=80.0, upper_barrier=130.0,
+                                  style="out", trigger="continuous", rebate=5.0, rebate_timing="hit",
+                                  **common)
+    assert price == pytest.approx(5.0, abs=1e-9)
+
+
+def test_vectorised_spot_matches_scalar_loop():
+    import numpy as np
+    spots = np.array([85.0, 100.0, 115.0, 125.0, 140.0])
+    common = {k: v for k, v in BASE.items() if k != "spot"}
+    vector = price_barrier_double(spot=spots, option_type="call", lower_barrier=80.0, upper_barrier=130.0,
+                                   style="out", trigger="continuous", **common)
+    scalars = np.array([
+        float(price_barrier_double(spot=s, option_type="call", lower_barrier=80.0, upper_barrier=130.0,
+                                    style="out", trigger="continuous", **common))
+        for s in spots
+    ])
+    assert vector == pytest.approx(scalars, abs=1e-10)
+
+
 # ---------------------------------------------------------- value_date -----
 
 

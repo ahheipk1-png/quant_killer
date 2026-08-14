@@ -207,7 +207,7 @@ def price_american_pde(
     option_type,
     vol_times,
     vol_values,
-    payment_time=None,
+    settle_lag=0.0,
     n_space=200,
     n_time=200,
     richardson=True,
@@ -216,6 +216,13 @@ def price_american_pde(
 ):
     """American option NPV via Crank-Nicolson PDE + penalty, Richardson-
     extrapolated in (space, time) by default.
+
+    `settle_lag` (cash-settlement delay, exercise at tau pays at tau+lag)
+    scales the whole value by e^(-r*lag) EXACTLY -- scaling the payoff by
+    a positive constant scales the LCP solution and leaves the exercise
+    region unchanged, the same argument as american_ju_zhong.py -- so the
+    PDE benchmark stays an independent check of the Ju-Zhong formula, not
+    of the (shared, exact) lag factorization.
 
     `value_date` (required) follows american_ju_zhong.py's convention.
     `strike == 0` needs no special handling here (unlike the closed forms):
@@ -226,27 +233,25 @@ def price_american_pde(
     eff_div_yield = div_yield + borrow
     if strike < 0.0:
         raise ValueError("strike must be non-negative.")
-    if payment_time is None:
-        payment_time = maturity
-    if payment_time < maturity - 1e-12:
-        raise ValueError("payment_time cannot precede maturity.")
+    if settle_lag < 0.0:
+        raise ValueError("settle_lag must be non-negative.")
     if value_date < 0.0:
         raise ValueError("value_date must be non-negative.")
 
     is_call = option_type == "call"
+    settlement = maturity + settle_lag
 
-    if value_date > payment_time:
+    if value_date > settlement:
         return 0.0
 
     if value_date >= maturity:
         intrinsic = max(spot - strike, 0.0) if is_call else max(strike - spot, 0.0)
-        return intrinsic * math.exp(-rate * (payment_time - value_date))
+        return intrinsic * math.exp(-rate * (settlement - value_date))
 
     maturity = maturity - value_date
-    payment_time = payment_time - value_date
     carry = rate - eff_div_yield
     vol = effective_vol(vol_times, vol_values, maturity)
-    deferral = math.exp(-rate * (payment_time - maturity))
+    deferral = math.exp(-rate * settle_lag)
 
     root_t = max(vol, 1e-4) * math.sqrt(maturity)
     s_min = max(spot, strike) * math.exp(-8.0 * root_t - 0.05)

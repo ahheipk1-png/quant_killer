@@ -27,3 +27,13 @@ breached and invalid-ordering edge cases. Correlation sweep against QMC:
 
 Consistent with the single-barrier basket case (`barrier_single_basket.md`)
 — error grows with correlation, all within the documented 15% bound.
+
+## Seasoned state and throughput
+
+`already_touched` (scalar bool, one scenario per call): same semantics as
+`barrier_single_basket.md`, with "touched" meaning either barrier. The
+breached-now rebate-at-hit fix from `barrier_double.md` applies here too
+(undiscounted rebate, not maturity-discounted).
+
+Measured throughput (2-asset basket, continuous trigger): **~640 calls/s**
+per scenario-call (dominated by the 256-mode spectral sum).

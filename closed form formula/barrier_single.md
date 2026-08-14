@@ -52,3 +52,22 @@ Two real bugs were caught and fixed by this test suite during development:
 the `european`-trigger up/down region mapping was inverted, and the put
 in/out combination formulas (Haug's cdi/cui/pdi/pui) had their up/down
 branches swapped.
+
+## Seasoned state and PFE vectorisation
+
+`already_touched` (bool, scalar or per-scenario array) is the barrier's
+seasoned state — whether it was breached between inception and value_date.
+Essential for PFE revaluation of in-flight trades (spot alone cannot tell
+you a knock-out died last month and drifted back inside): out+touched is
+dead (an "expiry"-timing rebate is still owed; a "hit"-timing rebate was
+already paid), in+touched is a plain vanilla European on the remaining
+horizon. Raises for `trigger="european"` (nothing observable before
+maturity).
+
+`spot` is vectorised (array in, array out) — verified element-by-element
+against the scalar path.
+
+## Throughput (PFE inner loop)
+
+Measured on this dev machine (100,000-scenario spot array, best of 5,
+continuous trigger, no rebate): **~2.9M prices/s**.

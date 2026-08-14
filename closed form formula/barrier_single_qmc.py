@@ -78,11 +78,24 @@ def qmc_price_barrier_single(
     n_points=2**14,
     n_shifts=8,
     seed=12345,
+    already_touched=False,
     *,
     value_date,
 ):
     if payment_time is None:
         payment_time = maturity
+    if already_touched:
+        # Seasoned state: out -> dead (expiry rebate still owed); in -> vanilla.
+        if style == "out":
+            price = rebate * math.exp(-rate * (payment_time - value_date)) if (rebate != 0.0 and rebate_timing == "expiry") else 0.0
+            return price, 0.0
+        return qmc_price_barrier_single(
+            spot, strike, rate, div_yield, borrow, maturity, option_type,
+            barrier=1e-12 if direction == "down" else 1e12, direction=direction,
+            style="out", trigger=trigger, vol_times=vol_times, vol_values=vol_values,
+            rebate=0.0, payment_time=payment_time, n_points=n_points,
+            n_shifts=n_shifts, seed=seed, value_date=value_date,
+        )
     if value_date > payment_time:
         return 0.0, 0.0
     if value_date >= maturity:

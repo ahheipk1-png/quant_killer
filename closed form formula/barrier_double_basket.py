@@ -213,7 +213,8 @@ def _rebate_at_expiry_double(spot, rate, carry, maturity, vol, lower, upper, sty
 
 def _rebate_at_hit_double(spot, rate, carry, maturity, vol, lower, upper, rebate):
     if not (lower < spot < upper):
-        return rebate * math.exp(-rate * maturity)
+        # Already beyond a barrier: the hit happens NOW -- undiscounted.
+        return rebate
     st = _strip_modes(spot, carry, vol, lower, upper)
     c, lam = st["c"], st["lam"]
     kernel = lam / (rate + lam) * (1.0 - np.exp(-(rate + lam) * maturity))
@@ -241,11 +242,16 @@ def price_barrier_double_basket(
     rebate=0.0,
     rebate_timing="hit",
     payment_time=None,
+    already_touched=False,
     *,
     value_date,
 ):
     """Double barrier on a weighted-sum basket. n=1, weights=[1.0] is the
     single-underlying case (reproduces barrier_double.py exactly).
+
+    `already_touched` (scalar bool -- one scenario per call, `spots` being
+    the per-asset vector) is the seasoned state: whether EITHER barrier was
+    breached before value_date. Semantics as barrier_single_basket.py.
 
     `value_date` (required) and `strike == 0` (epsilon substitution) follow
     barrier_single_basket.py's conventions -- see that file's docstring.
@@ -272,6 +278,8 @@ def price_barrier_double_basket(
         raise ValueError('rebate_timing="hit" is undefined for style="in".')
     if rebate != 0.0 and rebate_timing == "hit" and trigger == "european":
         raise ValueError('rebate_timing="hit" is undefined for trigger="european".')
+    if already_touched and trigger == "european":
+        raise ValueError('already_touched is meaningless for trigger="european" (barrier observed only at maturity).')
 
     if value_date > payment_time:
         return 0.0
@@ -279,10 +287,15 @@ def price_barrier_double_basket(
     if value_date >= maturity:
         realized = float(np.sum(np.asarray(weights, dtype=float) * np.asarray(spots, dtype=float)))
         strike_eff = max(strike, 1e-8 * max(realized, 1.0))
-        touched0 = not (lower_barrier < realized < upper_barrier)
+        beyond = not (lower_barrier < realized < upper_barrier)
+        eff_touched = (already_touched or beyond) if trigger != "european" else beyond
         intrinsic = max(realized - strike_eff, 0.0) if option_type == "call" else max(strike_eff - realized, 0.0)
-        price = (0.0 if touched0 else intrinsic) if style == "out" else (intrinsic if touched0 else 0.0)
-        return price * math.exp(-rate * (payment_time - value_date))
+        disc = math.exp(-rate * (payment_time - value_date))
+        price = (0.0 if eff_touched else intrinsic) if style == "out" else (intrinsic if eff_touched else 0.0)
+        price *= disc
+        if rebate != 0.0 and rebate_timing == "expiry":
+            price += rebate * disc * (1.0 if (eff_touched == (style == "out")) else 0.0)
+        return price
 
     remaining_maturity = maturity - value_date
     remaining_payment = payment_time - value_date
@@ -294,6 +307,16 @@ def price_barrier_double_basket(
     payment_time = remaining_payment
     deferral = math.exp(-rate * (payment_time - maturity))
 
+    if already_touched:
+        if style == "out":
+            # Dead option; only a still-owed expiry rebate survives.
+            if rebate != 0.0 and rebate_timing == "expiry":
+                return rebate * math.exp(-rate * payment_time)
+            return 0.0
+        # Activated: vanilla European on the effective-GBM basket; no rebate.
+        vanilla = _vanilla_price(basket_spot, strike, rate, eff_carry, maturity, eff_vol, option_type)
+        return vanilla * deferral
+
     if not (lower_barrier < basket_spot < upper_barrier):
         vanilla = _vanilla_price(basket_spot, strike, rate, eff_carry, maturity, eff_vol, option_type)
         price = 0.0 if style == "out" else vanilla
@@ -301,7 +324,10 @@ def price_barrier_double_basket(
             price += rebate * math.exp(-rate * maturity) * (1.0 if style == "out" else 0.0)
         price *= deferral
         if rebate != 0.0 and rebate_timing == "hit":
-            price += rebate * math.exp(-rate * maturity)
+            # Effective basket is beyond a barrier NOW: the hit happens
+            # immediately, so the rebate's PV is the undiscounted rebate
+            # (fixes an earlier full-maturity discounting).
+            price += rebate
         return price
 
     if trigger == "european":

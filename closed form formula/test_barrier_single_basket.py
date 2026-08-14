@@ -58,6 +58,42 @@ def test_rebate_out_plus_in_equals_rebate_discounted():
     assert rebate_out + rebate_in == pytest.approx(5.0 * math.exp(-0.05 * 1.0), abs=1e-8)
 
 
+# ------------------------------------------------------- already_touched ---
+
+
+def test_touched_out_is_dead_and_expiry_rebate_owed():
+    common = dict(spots=[100.0, 95.0], weights=[0.6, 0.4], div_yields=[0.02, 0.0], borrows=[0.0, 0.0],
+                  strike=100.0, rate=0.05, maturity=1.0, option_type="call", barrier=115.0, direction="up",
+                  trigger="continuous", vol_times_list=[[1.0], [1.0]], vol_values_list=[[0.25], [0.3]],
+                  correlation=0.5, value_date=0.0)
+    dead = price_barrier_single_basket(style="out", already_touched=True, **common)
+    assert dead == pytest.approx(0.0, abs=1e-12)
+    with_rebate = price_barrier_single_basket(style="out", already_touched=True,
+                                               rebate=5.0, rebate_timing="expiry", **common)
+    assert with_rebate == pytest.approx(5.0 * math.exp(-0.05), abs=1e-10)
+
+
+def test_touched_in_plus_no_rebate_positive_vanilla():
+    common = dict(spots=[100.0, 95.0], weights=[0.6, 0.4], div_yields=[0.02, 0.0], borrows=[0.0, 0.0],
+                  strike=100.0, rate=0.05, maturity=1.0, option_type="call", barrier=115.0, direction="up",
+                  trigger="continuous", vol_times_list=[[1.0], [1.0]], vol_values_list=[[0.25], [0.3]],
+                  correlation=0.5, value_date=0.0)
+    activated = price_barrier_single_basket(style="in", already_touched=True, **common)
+    live_in = price_barrier_single_basket(style="in", **common)
+    live_out = price_barrier_single_basket(style="out", **common)
+    # Activated knock-in = full vanilla ~= live in + live out (moment-match consistent).
+    assert activated == pytest.approx(live_in + live_out, abs=1e-8)
+
+
+def test_touched_rejected_for_european_trigger():
+    with pytest.raises(ValueError):
+        price_barrier_single_basket(
+            spots=[100.0], weights=[1.0], div_yields=[0.02], borrows=[0.0],
+            option_type="call", style="out", already_touched=True,
+            **{**SINGLE, "trigger": "european"},
+        )
+
+
 # ---------------------------------------------------------- value_date -----
 
 

@@ -58,3 +58,22 @@ errors:
 | weekly vs matched discrete QMC | 0.824% |
 | rebate-at-hit vs dedicated fine-grid (4096 steps/yr) hitting-time MC | 0.219% |
 | sloped term-vol vs QMC | 6.543% |
+
+## Seasoned state and PFE vectorisation
+
+`already_touched` (bool, scalar or per-scenario array): same semantics as
+`barrier_single.md`, with "touched" meaning EITHER barrier was breached.
+Additionally, a spot **currently** beyond a barrier with
+`already_touched=False` knocks *now* — in that case a rebate-at-hit's PV is
+the full undiscounted rebate (this fixed an earlier version that wrongly
+discounted the immediate rebate by the whole remaining maturity).
+
+`spot` is vectorised: the sine-series mode sums and the Simpson payoff
+integral batch over the whole scenario vector as matrix products.
+
+## Throughput (PFE inner loop)
+
+Measured on this dev machine (100,000-scenario spot array, best of 5,
+continuous trigger, 256 modes x 640 Simpson intervals): **~105K prices/s**
+— an order of magnitude slower than the single barrier, dominated by the
+(scenarios x modes) @ (modes x grid) density product.

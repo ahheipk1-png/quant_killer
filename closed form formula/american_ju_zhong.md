@@ -1,5 +1,51 @@
 # American option (Ju-Zhong) — `american_ju_zhong.py`
 
+## Settlement lag (replaces payment_time)
+
+A European-style `payment_time` is a conceptual bug for American exercise —
+a fixed payment date detached from the (random) exercise date has no
+consistent meaning. The correct concept is a **cash-settlement lag**:
+exercising at time τ locks the cash amount (intrinsic at τ), which is paid
+at τ + L. This admits an **exact** closed form:
+
+```
+V_lag = sup_τ E[e^(−r(τ+L)) · payoff(S_τ)]
+      = e^(−rL) · sup_τ E[e^(−rτ) · payoff(S_τ)]
+      = e^(−rL) · V_no_lag
+```
+
+The constant `e^(−rL)` factors out of the optimal-stopping problem, so the
+**exercise boundary is unchanged** and no approximation is introduced
+beyond Ju-Zhong itself (verified by the boundary-invariance test: the
+lagged/unlagged price ratio is the same constant at every spot, including
+deep ITM). The alternative *physical-settlement* convention — where the
+exchange itself happens at τ+L — maps instead to Ju-Zhong with adjusted
+strike `K·e^(−rL)` and spot `S·e^(−qL)`, which shifts the boundary; still
+closed form, not implemented here.
+
+## Exercise-now indicator (PFE seasoned state, done right)
+
+`price_american_ju_zhong` returns a **pair** `(price, exercise_now)` — the
+second output is the per-scenario optimal-exercise boolean (spot beyond the
+BAW critical boundary, the same boundary the price itself is built on, and
+provably unchanged by the settle lag). Standalone helpers
+`american_exercise_boundary()` / `should_exercise_now()` expose the same
+decision without pricing.
+
+Why an indicator OUTPUT rather than an `already_exercised` INPUT (the
+barrier families' `already_touched` pattern): a touched knock-in *remains
+an option* (a vanilla), so the pricer must know the state; an exercised
+American is *no longer an option at all* — just a known cash amount paid
+at exercise_time + settle_lag, which needs the locked amount and the
+exercise date, booking facts a boolean cannot carry and the PFE engine
+already owns. The pricer therefore owes the engine the *decision* (to flip
+scenarios into the exercised state as the simulation steps through dates),
+and the engine books exercised scenarios itself as fixed cash flows.
+Consistency is test-enforced: wherever `exercise_now` is True the unlagged
+price sits exactly at intrinsic, wherever False it is strictly above.
+Past maturity the indicator degenerates to "in the money" (the terminal
+exercise rule); past settlement it is False.
+
 ## Formula
 
 Ju & Zhong (1999) quadratic approximation — a second-order correction to
@@ -9,7 +55,10 @@ earlier measurement in this project found Ju-Zhong both more accurate AND
 effective vol, same convention as every barrier family). Ported and
 adapted from this project's own validated `python/quantkiller/models/american.py`
 (added: term-vol collapse, an explicit borrow rate folded into the
-effective dividend yield, payment_time deferral).
+effective dividend yield, the cash-settlement lag above, and
+spot-vectorisation — the BAW/Ju-Zhong critical boundary is spot-INDEPENDENT,
+so it is solved once per call and the closed-form pieces broadcast over a
+whole scenario vector).
 
 Requires `rate >= 0` and `(div_yield + borrow) >= 0` — not defined/tested
 outside that regime. Two numerical singularities of the underlying BAW
@@ -61,3 +110,15 @@ Ju-Zhong vs PDE, across strikes/spots:
 
 All well under the documented 2% bound — consistent with Ju-Zhong's known
 sub-1% accuracy for vanilla American puts.
+
+## Throughput (PFE inner loop)
+
+Measured on this dev machine (vectorised over a 100,000-scenario spot
+array, best of 5, constant vol, put):
+
+| kernel | throughput |
+|---|---|
+| `price_american_ju_zhong` (vectorised) | ~9.7M prices/s |
+
+The boundary solve runs once per call regardless of scenario count, so
+throughput is essentially numpy-bound.

@@ -148,6 +148,65 @@ def test_negative_value_date_rejected():
                               trigger="continuous", **{**BASE, "value_date": -0.1})
 
 
+# ------------------------------------------------------- already_touched ---
+
+
+def test_touched_out_is_dead():
+    price = price_barrier_single(option_type="call", barrier=120.0, direction="up", style="out",
+                                  trigger="continuous", already_touched=True, **BASE)
+    assert price == pytest.approx(0.0, abs=1e-12)
+
+
+def test_touched_out_expiry_rebate_still_owed():
+    price = price_barrier_single(option_type="call", barrier=120.0, direction="up", style="out",
+                                  trigger="continuous", already_touched=True,
+                                  rebate=5.0, rebate_timing="expiry", **BASE)
+    assert price == pytest.approx(5.0 * math.exp(-BASE["rate"] * BASE["maturity"]), abs=1e-10)
+
+
+def test_touched_in_equals_vanilla_european():
+    price = price_barrier_single(option_type="put", barrier=80.0, direction="down", style="in",
+                                  trigger="continuous", already_touched=True, **BASE)
+    vanilla = price_european(spot=BASE["spot"], strike=BASE["strike"], rate=BASE["rate"],
+                              div_yield=BASE["div_yield"], borrow=BASE["borrow"], maturity=BASE["maturity"],
+                              option_type="put", vol_times=BASE["vol_times"], vol_values=BASE["vol_values"],
+                              value_date=0.0)
+    assert price == pytest.approx(vanilla, abs=1e-9)
+
+
+def test_touched_rejected_for_european_trigger():
+    with pytest.raises(ValueError):
+        price_barrier_single(option_type="call", barrier=120.0, direction="up", style="out",
+                              trigger="european", already_touched=True, **BASE)
+
+
+def test_per_scenario_touched_array():
+    import numpy as np
+    spots = np.array([90.0, 100.0, 110.0])
+    touched = np.array([True, False, True])
+    prices = price_barrier_single(option_type="call", barrier=120.0, direction="up", style="out",
+                                   trigger="continuous", already_touched=touched,
+                                   **{**BASE, "spot": spots})
+    assert prices[0] == pytest.approx(0.0, abs=1e-12)
+    assert prices[2] == pytest.approx(0.0, abs=1e-12)
+    alive = price_barrier_single(option_type="call", barrier=120.0, direction="up", style="out",
+                                  trigger="continuous", **{**BASE, "spot": 100.0})
+    assert prices[1] == pytest.approx(float(alive), abs=1e-12)
+
+
+def test_vectorised_spot_matches_scalar_loop():
+    import numpy as np
+    spots = np.array([85.0, 100.0, 115.0, 119.0])
+    vector = price_barrier_single(option_type="call", barrier=120.0, direction="up", style="out",
+                                   trigger="continuous", **{**BASE, "spot": spots})
+    scalars = np.array([
+        float(price_barrier_single(option_type="call", barrier=120.0, direction="up", style="out",
+                                    trigger="continuous", **{**BASE, "spot": s}))
+        for s in spots
+    ])
+    assert vector == pytest.approx(scalars, abs=1e-12)
+
+
 # ---------------------------------------------------------------- layer 2 --
 
 

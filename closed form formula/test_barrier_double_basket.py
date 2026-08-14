@@ -59,6 +59,30 @@ def test_already_breached_out_worthless():
     assert price == pytest.approx(0.0, abs=1e-10)
 
 
+# ------------------------------------------------------- already_touched ---
+
+
+def test_touched_out_dead_and_in_equals_vanilla_sum():
+    common = dict(spots=[100.0, 95.0], weights=[0.6, 0.4], div_yields=[0.02, 0.0], borrows=[0.0, 0.0],
+                  strike=100.0, rate=0.05, maturity=1.0, option_type="call", lower_barrier=82.0,
+                  upper_barrier=122.0, trigger="continuous", vol_times_list=[[1.0], [1.0]],
+                  vol_values_list=[[0.25], [0.3]], correlation=0.5, value_date=0.0)
+    dead = price_barrier_double_basket(style="out", already_touched=True, **common)
+    assert dead == pytest.approx(0.0, abs=1e-12)
+    activated = price_barrier_double_basket(style="in", already_touched=True, **common)
+    live_in = price_barrier_double_basket(style="in", **common)
+    live_out = price_barrier_double_basket(style="out", **common)
+    assert activated == pytest.approx(live_in + live_out, abs=1e-6)
+
+
+def test_touched_rejected_for_european_trigger():
+    with pytest.raises(ValueError):
+        price_barrier_double_basket(
+            spots=[100.0], weights=[1.0], div_yields=[0.0], borrows=[0.0], style="out",
+            option_type="call", already_touched=True, **{**SINGLE, "trigger": "european"},
+        )
+
+
 # ---------------------------------------------------------- value_date -----
 
 

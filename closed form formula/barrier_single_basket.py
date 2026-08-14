@@ -240,11 +240,19 @@ def price_barrier_single_basket(
     rebate=0.0,
     rebate_timing="hit",
     payment_time=None,
+    already_touched=False,
     *,
     value_date,
 ):
     """Single barrier on a weighted-sum basket. n=1, weights=[1.0] is the
     single-underlying case (reproduces barrier_single.py exactly).
+
+    `already_touched` (scalar bool -- this family prices ONE scenario per
+    call, since `spots` is the per-asset vector; a PFE engine loops over
+    scenarios) is the seasoned barrier state, with barrier_single.py's
+    semantics: out+touched is dead (expiry rebate still owed), in+touched
+    is a vanilla European on the effective-GBM basket. Raises for trigger
+    "european".
 
     `value_date` (required) and `strike == 0` (epsilon substitution) follow
     barrier_single.py's conventions. For value_date >= maturity, the TRUE
@@ -275,6 +283,8 @@ def price_barrier_single_basket(
         raise ValueError('rebate_timing="hit" is undefined for style="in".')
     if rebate != 0.0 and rebate_timing == "hit" and trigger == "european":
         raise ValueError('rebate_timing="hit" is undefined for trigger="european".')
+    if already_touched and trigger == "european":
+        raise ValueError('already_touched is meaningless for trigger="european" (barrier observed only at maturity).')
 
     if value_date > payment_time:
         return 0.0
@@ -282,10 +292,15 @@ def price_barrier_single_basket(
     if value_date >= maturity:
         realized = float(np.sum(np.asarray(weights, dtype=float) * np.asarray(spots, dtype=float)))
         strike_eff = max(strike, 1e-8 * max(realized, 1.0))
-        touched0 = (realized >= barrier) if direction == "up" else (realized <= barrier)
+        beyond = (realized >= barrier) if direction == "up" else (realized <= barrier)
+        eff_touched = (already_touched or beyond) if trigger != "european" else beyond
         intrinsic = max(realized - strike_eff, 0.0) if option_type == "call" else max(strike_eff - realized, 0.0)
-        price = (0.0 if touched0 else intrinsic) if style == "out" else (intrinsic if touched0 else 0.0)
-        return price * math.exp(-rate * (payment_time - value_date))
+        disc = math.exp(-rate * (payment_time - value_date))
+        price = (0.0 if eff_touched else intrinsic) if style == "out" else (intrinsic if eff_touched else 0.0)
+        price *= disc
+        if rebate != 0.0 and rebate_timing == "expiry":
+            price += rebate * disc * (1.0 if (eff_touched == (style == "out")) else 0.0)
+        return price
 
     remaining_maturity = maturity - value_date
     remaining_payment = payment_time - value_date
@@ -296,6 +311,27 @@ def price_barrier_single_basket(
     maturity = remaining_maturity
     payment_time = remaining_payment
     deferral = math.exp(-rate * (payment_time - maturity))
+
+    if already_touched:
+        if style == "out":
+            # Dead option; only a still-owed expiry rebate survives.
+            if rebate != 0.0 and rebate_timing == "expiry":
+                return rebate * math.exp(-rate * payment_time)
+            return 0.0
+        # Activated: vanilla European on the effective-GBM basket; no rebate.
+        root_t = eff_vol * math.sqrt(maturity)
+        disc_pay = math.exp(-rate * maturity)
+        forward = basket_spot * math.exp(eff_carry * maturity)
+        if root_t <= 0.0:
+            payoff = max(forward - strike, 0.0) if option_type == "call" else max(strike - forward, 0.0)
+            return disc_pay * payoff * deferral
+        d1 = (math.log(forward / strike) + 0.5 * root_t * root_t) / root_t
+        d2 = d1 - root_t
+        if option_type == "call":
+            vanilla = disc_pay * (forward * norm.cdf(d1) - strike * norm.cdf(d2))
+        else:
+            vanilla = disc_pay * (strike * norm.cdf(-d2) - forward * norm.cdf(-d1))
+        return float(vanilla) * deferral
 
     if trigger == "european":
         if direction == "up":

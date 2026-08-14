@@ -36,3 +36,8 @@ incl. T->0/vol->0/deep ITM-OTM, market-data stress incl. vol 0.1%-500%,
 rates -10%-20%, maturities 1 day-30y) plus a sloped-term-vol-curve case,
 all passing to closed-form tolerance (~1e-9 relative) or within a few QMC
 standard errors where the QMC benchmark is used.
+
+## Throughput (PFE inner loop)
+
+Measured on this dev machine (100,000-scenario spot array, best of 5):
+**~16M prices/s**.

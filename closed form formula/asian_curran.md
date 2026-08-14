@@ -58,3 +58,17 @@ Both variants stay well under 1% here; this project's earlier web-lab study
 found one-moment can be unsafe (up to -7.8% error) for low-correlation
 baskets with many fixings — always cross-check against QMC for production
 use outside the ranges tested here.
+
+**Negative (spread-style) weights**: `two_moment` REJECTS them — it fits a
+lognormal to the stochastic average, which is only meaningful when that
+average is guaranteed non-negative (this also invalidated the
+adjusted-strike<=0 "certain exercise -> forward" shortcut for mixed-sign
+weights, a real bug caught by QMC comparison at ~430 standard errors).
+`one_moment` has no lognormality assumption and handles spreads fine
+(measured 0.45% vs QMC on a [1,-1] spread basket).
+
+## Throughput
+
+One scenario per call (`spots` is the per-asset vector; seasoned state
+differs per scenario anyway). Measured: single asset, 12 fixings,
+one-moment: **~1,900 calls/s** — dominated by the adaptive z-quadrature.

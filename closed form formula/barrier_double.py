@@ -90,59 +90,71 @@ def _bgk_shift_double(lower, upper, vol, obs_per_year):
 _OBS_PER_YEAR = {"daily": 252.0, "weekly": 52.0, "monthly": 12.0}
 
 
-def _strip_modes(spot, carry, vol, lower, upper):
+_SIGMA_UNREACHABLE = 8.0
+
+
+def _barrier_negligible_mask(spot, vol, maturity, lower, upper):
+    """Per-spot mask: True where both barriers are so many standard
+    deviations away (in log space) that no finite mode truncation would
+    meaningfully see them -- the coefficients c_n decay like O(1/n), so
+    Sum_{n<=M} c_n undershoots 1 by an amount that does NOT vanish as
+    maturity -> 0 (the density needs infinitely many modes to resolve a
+    near-delta initial condition), unlike the rebate-at-hit kernel's tail
+    (which genuinely -> 1, justifying that trick's tail correction).
+    Bypassing the truncated sum entirely there sidesteps the bias rather
+    than papering over it."""
+    spot = np.asarray(spot, dtype=float)
+    root_t = vol * math.sqrt(maturity)
+    if root_t <= 1e-12:
+        return np.ones_like(spot, dtype=bool)
+    dist_lower = np.log(spot / lower)
+    dist_upper = np.log(upper / spot)
+    return np.minimum(dist_lower, dist_upper) > _SIGMA_UNREACHABLE * root_t
+
+
+def _strip_modes_vec(spot, carry, vol, lower, upper):
+    """Vectorised twin of the old scalar _strip_modes: x0 and c become
+    (n_spots, modes). Out-of-strip spots produce garbage rows -- callers
+    MUST mask them. Always returns 1-d x0 (callers unwrap scalars)."""
+    spot = np.atleast_1d(np.asarray(spot, dtype=float))
     log_l, log_u = math.log(lower), math.log(upper)
     width = log_u - log_l
-    x0 = math.log(spot) - log_l
+    x0 = np.log(np.maximum(spot, 1e-300)) - log_l  # (n,)
     theta = (carry - 0.5 * vol * vol) / (vol * vol)
     n = np.arange(1, NUM_MODES + 1)
     wave = n * math.pi / width
     lam = 0.5 * vol * vol * wave * wave + 0.5 * theta * theta * vol * vol
-    sign = np.where(n % 2 == 0, 1.0, -1.0)  # (-1)^n
+    sign = np.where(n % 2 == 0, 1.0, -1.0)
     i_n = wave / (theta * theta + wave * wave) * (1.0 - sign * math.exp(theta * width))
-    c_n = (2.0 / width) * np.sin(wave * x0) * i_n
-    return {"log_l": log_l, "width": width, "x0": x0, "theta": theta, "wave": wave, "lam": lam, "c": c_n}
-
-
-_SIGMA_UNREACHABLE = 8.0
-
-
-def _barrier_negligible(spot, vol, maturity, lower, upper):
-    """True when both barriers are so many standard deviations away (in log
-    space) that no finite mode truncation would meaningfully see them --
-    the coefficients c_n decay like O(1/n), so Sum_{n<=M} c_n undershoots 1
-    by an amount that does NOT vanish as maturity -> 0 (the density needs
-    infinitely many modes to resolve a near-delta initial condition), unlike
-    the rebate-at-hit kernel's tail (which genuinely -> 1, justifying that
-    trick's tail correction). Bypassing the truncated sum entirely here --
-    same spirit as the existing vol<=0 / maturity<=0 deterministic
-    fallbacks -- sidesteps the bias rather than papering over it."""
-    root_t = vol * math.sqrt(maturity)
-    if root_t <= 1e-12:
-        return True
-    dist_lower = math.log(spot / lower)
-    dist_upper = math.log(upper / spot)
-    return min(dist_lower, dist_upper) > _SIGMA_UNREACHABLE * root_t
+    sin_x0 = np.sin(wave[None, :] * x0[:, None])  # (n, modes)
+    c_n = (2.0 / width) * sin_x0 * i_n[None, :]
+    return {"log_l": log_l, "width": width, "x0": x0, "theta": theta,
+            "wave": wave, "lam": lam, "c": c_n, "sin_x0": sin_x0}
 
 
 def _survival_probability(spot, carry, vol, maturity, lower, upper):
-    if not (lower < spot < upper):
-        return 0.0
-    if _barrier_negligible(spot, vol, maturity, lower, upper):
-        return 1.0
-    st = _strip_modes(spot, carry, vol, lower, upper)
-    return float(np.clip(np.sum(st["c"] * np.exp(-st["lam"] * maturity)), 0.0, 1.0))
+    """Vectorised in spot; scalar in -> scalar out."""
+    scalar_in = np.ndim(spot) == 0
+    spot = np.atleast_1d(np.asarray(spot, dtype=float))
+    inside = (lower < spot) & (spot < upper)
+    negligible = _barrier_negligible_mask(spot, vol, maturity, lower, upper)
+    st = _strip_modes_vec(spot, carry, vol, lower, upper)
+    spectral = np.clip(np.sum(st["c"] * np.exp(-st["lam"] * maturity)[None, :], axis=-1), 0.0, 1.0)
+    result = np.where(~inside, 0.0, np.where(negligible, 1.0, spectral))
+    return float(result[0]) if scalar_in else result
 
 
 def _spectral_out_price(spot, strike, rate, carry, maturity, vol, lower, upper, option_type):
-    if not (lower < spot < upper):
-        return 0.0
-    if _barrier_negligible(spot, vol, maturity, lower, upper):
-        return _vanilla_price(spot, strike, rate, carry, maturity, vol, option_type)
-    st = _strip_modes(spot, carry, vol, lower, upper)
+    """Vectorised in spot. Out-of-strip -> 0; barrier-negligible -> vanilla.
+    Scalar in -> scalar out."""
+    scalar_in = np.ndim(spot) == 0
+    spot = np.atleast_1d(np.asarray(spot, dtype=float))
+    inside = (lower < spot) & (spot < upper)
+    negligible = _barrier_negligible_mask(spot, vol, maturity, lower, upper)
+    st = _strip_modes_vec(spot, carry, vol, lower, upper)
     width, x0, theta = st["width"], st["x0"], st["theta"]
     mode_decay = np.exp(-st["lam"] * maturity)
-    mode_vec = np.sin(st["wave"] * x0) * mode_decay  # (modes,)
+    mode_vec = st["sin_x0"] * mode_decay[None, :]  # (n, modes)
 
     y_grid = np.linspace(0.0, width, _Y_INTERVALS + 1)
     dy = width / _Y_INTERVALS
@@ -151,47 +163,55 @@ def _spectral_out_price(spot, strike, rate, carry, maturity, vol, lower, upper, 
     simp_w[2:-1:2] = 2.0
 
     sin_y = np.sin(np.outer(st["wave"], y_grid))  # (modes, gridpts)
-    series = mode_vec @ sin_y  # (gridpts,)
-    density = (2.0 / width) * np.exp(theta * (y_grid - x0)) * series
+    series = mode_vec @ sin_y  # (n, gridpts)
+    density = (2.0 / width) * np.exp(theta * y_grid)[None, :] * np.exp(-theta * x0)[:, None] * series
     density = np.maximum(density, 0.0)
 
     prices_y = np.exp(y_grid + st["log_l"])
     payoff = np.maximum(prices_y - strike, 0.0) if option_type == "call" else np.maximum(strike - prices_y, 0.0)
-    undiscounted = float(np.sum(simp_w * density * payoff)) * dy / 3.0
+    undiscounted = (density * (simp_w * payoff)[None, :]).sum(axis=-1) * dy / 3.0
     disc_pay = math.exp(-rate * maturity)
-    return disc_pay * undiscounted
+    spectral = disc_pay * undiscounted
+    vanilla = _vanilla_price(spot, strike, rate, carry, maturity, vol, option_type)
+    result = np.where(~inside, 0.0, np.where(negligible, vanilla, spectral))
+    return float(result[0]) if scalar_in else result
 
 
 def _european_touch_probability(spot, rate, carry, maturity, vol, lower, upper):
     """P(S_T outside [lower,upper]) under lognormal S_T -- no path/continuity
-    concept at all, since the barrier is checked only once, at maturity."""
+    concept at all, since the barrier is checked only once, at maturity.
+    Vectorised in spot."""
+    spot = np.asarray(spot, dtype=float)
     root_t = vol * math.sqrt(maturity)
     if root_t <= 0.0:
-        forward = spot * math.exp(carry * maturity)
-        return 0.0 if lower < forward < upper else 1.0
-    mean = math.log(spot) + carry * maturity - 0.5 * vol * vol * maturity
+        forward = spot * np.exp(carry * maturity)
+        inside = (lower < forward) & (forward < upper)
+        return np.where(inside, 0.0, 1.0)
+    mean = np.log(spot) + carry * maturity - 0.5 * vol * vol * maturity
     z_lower = (math.log(lower) - mean) / root_t
     z_upper = (math.log(upper) - mean) / root_t
     inside = norm.cdf(z_upper) - norm.cdf(z_lower)
-    return float(np.clip(1.0 - inside, 0.0, 1.0))
+    return np.clip(1.0 - inside, 0.0, 1.0)
 
 
 def _truncated_vanilla_region(spot, strike, rate, carry, maturity, option_type, vol, lower, upper):
+    """Vectorised in spot (region bounds a, b are scalars)."""
+    spot = np.asarray(spot, dtype=float)
     disc_pay = math.exp(-rate * maturity)
     disc_carry = math.exp((carry - rate) * maturity)
     root_t = vol * math.sqrt(maturity)
     if root_t <= 0.0:
-        forward = spot * math.exp(carry * maturity)
-        inside = lower < forward < upper
-        payoff = max(forward - strike, 0.0) if option_type == "call" else max(strike - forward, 0.0)
-        return disc_pay * payoff if inside else 0.0
+        forward = spot * np.exp(carry * maturity)
+        inside = (lower < forward) & (forward < upper)
+        payoff = np.maximum(forward - strike, 0.0) if option_type == "call" else np.maximum(strike - forward, 0.0)
+        return np.where(inside, disc_pay * payoff, 0.0)
 
     def d1(level):
         if level <= 0.0:
-            return math.inf
+            return np.full_like(spot, np.inf)
         if math.isinf(level):
-            return -math.inf
-        return (math.log(spot / level) + (carry + 0.5 * vol * vol) * maturity) / root_t
+            return np.full_like(spot, -np.inf)
+        return (np.log(spot / level) + (carry + 0.5 * vol * vol) * maturity) / root_t
 
     def d2(level):
         return d1(level) - root_t
@@ -201,20 +221,23 @@ def _truncated_vanilla_region(spot, strike, rate, carry, maturity, option_type, 
     else:
         a, b = lower, min(upper, strike)
     if a >= b:
-        return 0.0
+        return 0.0 * spot
     stock_leg = spot * disc_carry * (norm.cdf(d1(a)) - norm.cdf(d1(b)))
     cash_leg = strike * disc_pay * (norm.cdf(d2(a)) - norm.cdf(d2(b)))
     return stock_leg - cash_leg if option_type == "call" else cash_leg - stock_leg
 
 
 def _vanilla_price(spot, strike, rate, carry, maturity, vol, option_type):
+    """Vectorised in spot."""
+    spot = np.asarray(spot, dtype=float)
     root_t = vol * math.sqrt(maturity)
     disc_pay = math.exp(-rate * maturity)
     disc_carry = math.exp((carry - rate) * maturity)
     if root_t <= 0.0:
-        forward = spot * math.exp(carry * maturity)
-        return disc_pay * (max(forward - strike, 0.0) if option_type == "call" else max(strike - forward, 0.0))
-    d1 = (math.log(spot / strike) + (carry + 0.5 * vol * vol) * maturity) / root_t
+        forward = spot * np.exp(carry * maturity)
+        payoff = np.maximum(forward - strike, 0.0) if option_type == "call" else np.maximum(strike - forward, 0.0)
+        return disc_pay * payoff
+    d1 = (np.log(spot / strike) + (carry + 0.5 * vol * vol) * maturity) / root_t
     d2 = d1 - root_t
     if option_type == "call":
         return spot * disc_carry * norm.cdf(d1) - strike * disc_pay * norm.cdf(d2)
@@ -231,14 +254,21 @@ def _rebate_at_expiry_double(spot, rate, carry, maturity, vol, lower, upper, sty
 
 
 def _rebate_at_hit_double(spot, rate, carry, maturity, vol, lower, upper, rebate):
-    if not (lower < spot < upper):
-        return rebate * math.exp(-rate * maturity)
-    st = _strip_modes(spot, carry, vol, lower, upper)
+    """Vectorised in spot. A spot already beyond either barrier means the
+    hit happens NOW -- the rebate's PV is the undiscounted rebate itself
+    (this fixes an earlier version that wrongly discounted it by the full
+    remaining maturity)."""
+    scalar_in = np.ndim(spot) == 0
+    spot = np.atleast_1d(np.asarray(spot, dtype=float))
+    inside = (lower < spot) & (spot < upper)
+    st = _strip_modes_vec(spot, carry, vol, lower, upper)
     c, lam = st["c"], st["lam"]
     kernel = lam / (rate + lam) * (1.0 - np.exp(-(rate + lam) * maturity))
-    truncated = float(np.sum(c * kernel))
-    tail_correction = 1.0 - float(np.sum(c))  # exact: sum_all c_n = S(0) = 1
-    return rebate * (truncated + tail_correction)
+    truncated = np.sum(c * kernel[None, :], axis=-1)
+    tail_correction = 1.0 - np.sum(c, axis=-1)  # exact: sum_all c_n = S(0) = 1
+    spectral = rebate * (truncated + tail_correction)
+    result = np.where(inside, spectral, rebate)
+    return float(result[0]) if scalar_in else result
 
 
 def price_barrier_double(
@@ -258,13 +288,24 @@ def price_barrier_double(
     rebate=0.0,
     rebate_timing="hit",
     payment_time=None,
+    already_touched=False,
     *,
     value_date,
 ):
-    """Double barrier option NPV.
+    """Double barrier option NPV. `spot` may be a scalar or numpy array
+    (PFE scenario vector); the return matches its shape.
 
     style: "in" or "out". trigger: "european","monthly","weekly","daily","continuous".
     rebate_timing: "hit" or "expiry" (ignored if rebate == 0).
+
+    `already_touched` (bool, scalar or per-scenario array) is the seasoned
+    barrier state -- whether EITHER barrier was breached between inception
+    and value_date. Same semantics as barrier_single.py: out+touched is
+    dead (expiry rebate still owed, hit rebate already paid), in+touched
+    is a plain vanilla on the remaining horizon. Raises for trigger
+    "european". A spot CURRENTLY outside the corridor with
+    already_touched=False is treated as hitting now: for rebate_timing
+    "hit" the rebate's PV is the full undiscounted rebate.
 
     `value_date` (required) and `strike == 0` (epsilon substitution) follow
     the same conventions as barrier_single.py -- see that file's docstring.
@@ -292,16 +333,30 @@ def price_barrier_double(
     if rebate != 0.0 and rebate_timing == "hit" and trigger == "european":
         raise ValueError('rebate_timing="hit" is undefined for trigger="european".')
 
-    if value_date > payment_time:
-        return 0.0
+    spot = np.asarray(spot, dtype=float)
+    touched = np.broadcast_to(np.asarray(already_touched, dtype=bool), spot.shape) if spot.shape else np.asarray(already_touched, dtype=bool)
+    if trigger == "european" and np.any(touched):
+        raise ValueError('already_touched is meaningless for trigger="european" (barrier observed only at maturity).')
 
-    strike = max(strike, 1e-8 * max(spot, 1.0))
+    if value_date > payment_time:
+        return 0.0 * spot
+
+    strike = max(strike, 1e-8 * max(float(np.max(spot)), 1.0))
 
     if value_date >= maturity:
-        touched0 = not (lower_barrier < spot < upper_barrier)
-        intrinsic = max(spot - strike, 0.0) if option_type == "call" else max(strike - spot, 0.0)
-        price = (0.0 if touched0 else intrinsic) if style == "out" else (intrinsic if touched0 else 0.0)
-        return price * math.exp(-rate * (payment_time - value_date))
+        beyond = ~((lower_barrier < spot) & (spot < upper_barrier))
+        eff_touched = (touched | beyond) if trigger != "european" else beyond
+        intrinsic = np.maximum(spot - strike, 0.0) if option_type == "call" else np.maximum(strike - spot, 0.0)
+        disc = math.exp(-rate * (payment_time - value_date))
+        if style == "out":
+            price = np.where(eff_touched, 0.0, intrinsic) * disc
+            if rebate != 0.0 and rebate_timing == "expiry":
+                price = price + np.where(eff_touched, rebate * disc, 0.0)
+        else:
+            price = np.where(eff_touched, intrinsic, 0.0) * disc
+            if rebate != 0.0 and rebate_timing == "expiry":
+                price = price + np.where(eff_touched, 0.0, rebate * disc)
+        return price
 
     maturity = maturity - value_date
     payment_time = payment_time - value_date
@@ -309,16 +364,8 @@ def price_barrier_double(
     vol = effective_vol(vol_times, vol_values, maturity)
     deferral = math.exp(-rate * (payment_time - maturity))
 
-    if not (lower_barrier < spot < upper_barrier):
-        # Already breached at inception.
-        vanilla = _vanilla_price(spot, strike, rate, carry, maturity, vol, option_type)
-        price = 0.0 if style == "out" else vanilla
-        if rebate != 0.0 and rebate_timing == "expiry":
-            price += rebate * math.exp(-rate * maturity) * (1.0 if style == "out" else 0.0)
-        price *= deferral
-        if rebate != 0.0 and rebate_timing == "hit":
-            price += rebate * math.exp(-rate * maturity)
-        return price
+    inside = (lower_barrier < spot) & (spot < upper_barrier)
+    vanilla = _vanilla_price(spot, strike, rate, carry, maturity, vol, option_type)
 
     if trigger == "european":
         out_price = _truncated_vanilla_region(spot, strike, rate, carry, maturity, option_type, vol,
@@ -331,12 +378,28 @@ def price_barrier_double(
             eff_lower, eff_upper = lower_barrier, upper_barrier
         out_price = _spectral_out_price(spot, strike, rate, carry, maturity, vol, eff_lower, eff_upper, option_type)
 
-    vanilla = _vanilla_price(spot, strike, rate, carry, maturity, vol, option_type)
+    # Live (in-corridor, never-touched) value.
     price = out_price if style == "out" else (vanilla - out_price)
-
     if rebate != 0.0 and rebate_timing == "expiry":
-        price += _rebate_at_expiry_double(spot, rate, carry, maturity, vol, eff_lower, eff_upper, style, rebate, trigger)
-    price *= deferral
+        price = price + _rebate_at_expiry_double(spot, rate, carry, maturity, vol, eff_lower, eff_upper,
+                                                  style, rebate, trigger)
+    price = price * deferral
     if rebate != 0.0 and rebate_timing == "hit":
-        price += _rebate_at_hit_double(spot, rate, carry, maturity, vol, eff_lower, eff_upper, rebate)
+        price = price + _rebate_at_hit_double(spot, rate, carry, maturity, vol, eff_lower, eff_upper, rebate)
+
+    if trigger != "european":
+        # Spot currently beyond a barrier but not previously flagged:
+        # knocks right now. (_rebate_at_hit_double / _rebate_at_expiry_double
+        # and _spectral_out_price already return the correct breached-now
+        # limits, so `price` above is already right for style="out"; for
+        # "in" it degenerates to vanilla via out_price -> 0.)
+        # Previously-touched scenarios (seasoned state) instead:
+        if np.any(touched):
+            if style == "out":
+                touched_value = np.zeros_like(spot)
+                if rebate != 0.0 and rebate_timing == "expiry":
+                    touched_value = touched_value + rebate * math.exp(-rate * payment_time)
+            else:
+                touched_value = vanilla * deferral
+            price = np.where(touched, touched_value, price)
     return price
