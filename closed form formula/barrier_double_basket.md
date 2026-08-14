@@ -8,13 +8,18 @@ handed to the SAME absorbing-boundary spectral machinery as
 correction for rebate-at-hit and the barrier-negligible guard — see
 `barrier_double.md` for the derivation).
 
+## Valuation conventions
+
+Same as `barrier_single_basket.md` (required `value_date`, true realized
+basket once past maturity, `strike = 0` epsilon substitution).
+
 ## Benchmark
 
 `barrier_double_basket_qmc.py`: true correlated multi-asset basket path
 simulation (same approach as `barrier_single_basket_qmc.py`), monitored
 against both barrier levels directly — not the effective-GBM shortcut.
 
-## Tests — `test_barrier_double_basket.py` (12 tests)
+## Tests — `test_barrier_double_basket.py` (20 tests)
 
 Exact reduction: 1-asset basket = `barrier_double.py` bit-for-bit. Already-
 breached and invalid-ordering edge cases. Correlation sweep against QMC:

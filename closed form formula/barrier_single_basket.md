@@ -17,6 +17,13 @@ basket case); every path-dependent trigger (monitored or continuous) is a
 further approximation, since the basket's true running extremum isn't
 generally well-represented by a single effective-GBM path.
 
+## Valuation conventions
+
+Same required `value_date` convention as `barrier_single.md`; once
+realized (`value_date >= maturity`), the TRUE basket value
+`sum(w_i * spots_i)` (not the moment-matched proxy) is checked against the
+barrier and strike. `strike = 0` via the same epsilon substitution.
+
 ## Benchmark
 
 `barrier_single_basket_qmc.py`: simulates the ACTUAL correlated multi-asset
@@ -25,7 +32,7 @@ Cholesky) and monitors the true `B_t` against the barrier — deliberately
 NOT using the closed form's effective-lognormal shortcut, so the gap is
 exactly the basket-collapse approximation error.
 
-## Tests — `test_barrier_single_basket.py` (18 tests)
+## Tests — `test_barrier_single_basket.py` (21 tests)
 
 Exact reduction: 1-asset basket = `barrier_single.py` bit-for-bit (weights
 `[1.0]`). Correlation sweep (continuous trigger, 2-asset basket) against

@@ -35,6 +35,11 @@ from spot, the truncated sum is bypassed entirely in favor of the exact
 `S=1` / `price=vanilla` limit, rather than papering over the truncation
 bias.
 
+## Valuation conventions
+
+Same required `value_date` three-regime convention and `strike = 0`
+epsilon substitution as `barrier_single.md`.
+
 ## Benchmark
 
 `barrier_double_qmc.py`: a double barrier's continuous crossing probability
@@ -45,7 +50,7 @@ trigger including "continuous" — discretization bias shrinks like
 hand (a 1024/2048/4096/8192-step sweep gave 0.732/0.706/0.684/0.677,
 extrapolating to ~0.66 against the closed form's 0.653).
 
-## Tests — `test_barrier_double.py` (40 tests)
+## Tests — `test_barrier_double.py` (51 tests)
 
 `S(0)=1` checked directly (not just through a price), in+out parity,
 already-breached / wide-barrier / narrow-corridor edge cases. Measured

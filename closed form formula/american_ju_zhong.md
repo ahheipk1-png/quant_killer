@@ -68,6 +68,16 @@ denominator for puts), and `vol <= 0.5%` falls back to the exact `vol=0`
 limit (`max(intrinsic, European)`) rather than risking `exp()` overflow in
 the boundary solve.
 
+## Valuation conventions
+
+`value_date` (required): past `maturity + settle_lag` -> 0; in
+`[maturity, maturity + settle_lag]` -> discounted intrinsic of the
+realized spot (assumes no early exercise -- an early-exercised trade is a
+fixed cash flow the caller books directly, see the exercise-indicator
+section); before maturity -> Ju-Zhong on the remaining horizon times
+e^(-r*settle_lag). `strike = 0` via the same epsilon substitution as the
+barrier families.
+
 ## Benchmark
 
 `american_pde.py` — this is the one family using a **PDE** instead of a QMC
@@ -93,7 +103,7 @@ independent verification of near-second-order convergence — measured
 Successive differences shrink by roughly the expected factor as resolution
 doubles.
 
-## Tests — `test_american_ju_zhong.py` (29 tests)
+## Tests — `test_american_ju_zhong.py` (45 tests)
 
 Call with zero dividend/borrow reduces exactly to European (~1e-9).
 Ju-Zhong vs PDE, across strikes/spots:

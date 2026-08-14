@@ -20,13 +20,21 @@ effective lognormal via a **2-moment (Lévy) match** —
 is APPROXIMATE (unlike the single-asset case); the size of the error is
 measured directly, not asserted away.
 
+## Valuation conventions
+
+Same required `value_date` three-regime convention as `european.md`. For
+the basket, once realized (`value_date >= maturity`) the TRUE basket value
+`sum(w_i * spots_i)` decides the payoff -- not the moment-matched proxy.
+`strike = 0` is exact: a digital call always pays (cash, or the forward
+for asset-or-nothing), a digital put never does.
+
 ## Benchmark
 
 `digital_qmc.py`: shifted-Sobol QMC, single-asset exact terminal draw, or
 correlated multi-asset terminal draws (Cholesky, eigenvalue-clipped for
 near-degenerate correlation matrices) for the basket.
 
-## Tests — `test_digital.py` (28 tests)
+## Tests — `test_digital.py` (35 tests)
 
 Exact reduction checks (1-asset basket = single asset; identical assets at
 rho=1 = single asset; basket forward = weighted sum of forwards), boundary

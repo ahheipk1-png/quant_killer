@@ -21,6 +21,16 @@ Edge cases handled exactly: `T=0` -> intrinsic; `W(T)=0` -> discounted
 forward intrinsic; `payment_time > maturity` -> diffuse to maturity,
 discount the extra gap at `rate`.
 
+## Valuation conventions (all families share these)
+
+- `value_date` (required, no implicit "today"): the as-of time on the same
+  axis as `maturity`/`payment_time`. Three regimes: past `payment_time` ->
+  0 (settled); in `[maturity, payment_time)` -> the payoff is already fixed
+  (`spot` IS the realized S(maturity)), just a deferred discounted cash
+  amount; before `maturity` -> standard pricing on the remaining horizon.
+- `strike = 0` is legal and exact here: a put is identically worthless, a
+  call is the discounted forward (no log-based formula is touched).
+
 ## Benchmark
 
 `european_qmc.py`: randomized (shifted) Sobol Monte Carlo under the same
@@ -29,7 +39,7 @@ is exact, this exists mainly as the *pattern* every other family's QMC
 benchmark reuses (shifted-Sobol standard-error estimation), and as a
 regression check that the closed form and an independent simulation agree.
 
-## Tests — `test_european.py` (39 tests)
+## Tests — `test_european.py` (48 tests)
 
 Three layers (analytic invariants incl. put-call parity, boundary cases
 incl. T->0/vol->0/deep ITM-OTM, market-data stress incl. vol 0.1%-500%,

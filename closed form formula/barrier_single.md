@@ -24,6 +24,15 @@ supported everywhere).
 Low-volatility overflow guard: `(H/S)^(2*mu)` overflows for `sigma` below
 ~1%; falls back to the deterministic-drift limit.
 
+## Valuation conventions
+
+`value_date` (required) follows `european.md`'s three-regime convention;
+past maturity, `spot` is the realized S(maturity) and `already_touched`
+(or the realized spot being beyond the barrier) decides the payoff.
+`strike = 0` is priced by substituting an economically negligible positive
+epsilon -- this family's closed form bakes strike into several log() terms
+with no clean K=0 special case.
+
 ## Benchmark
 
 `barrier_single_qmc.py`: for `continuous`, a **Brownian-bridge survival
@@ -35,7 +44,7 @@ discrete monitoring). Rebate-at-hit needs an actual hit *time*, which the
 bridge weight doesn't give, so that path uses a fine (1024+ steps/year)
 hard-indicator grid and a looser, printed-error tolerance.
 
-## Tests — `test_barrier_single.py` (52 tests)
+## Tests — `test_barrier_single.py` (63 tests)
 
 In+out=vanilla parity (all 5 triggers x call/put, ~1e-7), monotonicity
 (`continuous <= daily <= weekly <= monthly <= european` KO price), rebate

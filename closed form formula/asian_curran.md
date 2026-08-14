@@ -34,6 +34,16 @@ kink in z that a fixed 320-node Simpson rule only resolved to ~1e-3 (this
 was a real bug, caught by the single-fixing-equals-European test); QUADPACK's
 adaptive subdivision handles the kink automatically, reaching ~1e-11.
 
+## Valuation conventions
+
+Same required `value_date` convention as `european.md`, with one Asian
+specific: once `value_date >= maturity`, every fixing must already be
+reflected in `observed_sum`/`observed_count` (pass an empty
+`fixing_times`) -- the realized average is not reconstructible from spot
+alone, so the pricer refuses to guess. `fixing_times` are absolute times
+and are shifted internally by `value_date`. `strike = 0` needs no special
+handling (strike never enters a log or denominator here).
+
 ## Benchmark
 
 `asian_qmc.py`: fine-sub-grid Sobol QMC that simulates the *actual*
@@ -41,7 +51,7 @@ constant-instantaneous-correlation multi-asset model, deliberately NOT
 reproducing the closed form's `rho*sqrt(W_i*W_j)` shortcut — the gap is
 exactly what the cross-covariance approximation costs.
 
-## Tests — `test_asian_curran.py` (28 tests)
+## Tests — `test_asian_curran.py` (35 tests)
 
 Exact identities: single-fixing = European (fresh and seasoned), capped
 Asian = call-spread of two uncapped Curran prices, 1-asset basket = single
